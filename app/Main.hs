@@ -3,8 +3,9 @@ module Main where
 
 -- import Lib
 
-import Options.Applicative
+import Config (loadConfig)
 import Data.Semigroup ((<>))
+import Options.Applicative
 
 main :: IO ()
 main = do
@@ -13,7 +14,11 @@ main = do
    case op of
       AllFlags{..} ->
          case afCommand of
-            Snap pretend -> putStrLn $ "Snap: " ++ show pretend
+            Snap pretend -> do
+               putStrLn $ "Snap: " ++ show pretend
+               putStrLn $ "Config: " ++ gfConfig afGlobal
+               conf <- loadConfig $ gfConfig afGlobal
+               putStrLn $ "config: " ++ show conf
 
 data AllFlags = AllFlags {
    afGlobal :: GlobalFlags,
@@ -48,7 +53,7 @@ globalopt =
    strOption (short 'c' <>
       long "config" <>
       metavar "CONFIG" <>
-      value "~/.gack.yaml" <>
+      value "/home/davidb/.gack.yaml" <> -- TODO: Use ~/ instead of hardcoded
       help "Set the config file to use"))
 
 snapopts :: Parser Commands
