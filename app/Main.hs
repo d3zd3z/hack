@@ -5,6 +5,7 @@ module Main where
 
 import Homedir
 import Config (loadConfig)
+import Control.Exception (throwIO)
 import Data.Semigroup ((<>))
 import Options.Applicative
 
@@ -13,15 +14,16 @@ main = do
    op <- execParser mainopts
    putStrLn $ show op
    case op of
-      AllFlags{..} ->
+      AllFlags{..} -> do
+         cname <- expandTilde $ gfConfig afGlobal
+         rconf <- loadConfig cname
+         config <- case rconf of
+            Left err -> throwIO err
+            Right c -> return c
          case afCommand of
             Snap pretend -> do
                putStrLn $ "Snap: " ++ show pretend
-               putStrLn $ "Config: " ++ gfConfig afGlobal
-               cname <- expandTilde $ gfConfig afGlobal
-               putStrLn $ "Config2: " ++ cname
-               conf <- loadConfig cname
-               putStrLn $ "config: " ++ show conf
+               putStrLn $ "Config: " ++ show config
 
 data AllFlags = AllFlags {
    afGlobal :: GlobalFlags,
