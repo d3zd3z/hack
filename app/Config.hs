@@ -17,7 +17,4 @@ loadConfig = Y.decodeFileEither
 -- |Load as in loadConfig, but throw an exception in the IO monad if
 -- there is an error.
 loadConfigError :: FilePath -> IO Config
--- loadConfigError = either throwIO return . loadConfig
-loadConfigError fname = do
-   conf <- loadConfig fname
-   either throwIO return conf
+loadConfigError fname = loadConfig fname >>= either throwIO return
