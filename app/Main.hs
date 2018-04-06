@@ -8,13 +8,14 @@ import Homedir
 import Config (loadConfigError, Config(..), Snap(..), Volume(..))
 import Data.Maybe (isNothing)
 import Data.Time.Clock (getCurrentTime)
--- import Data.Time.Format (formatTime, FormatTime, defaultTimeLocale)
+import Data.Time.Format (formatTime, FormatTime, defaultTimeLocale)
 import Control.Monad (unless, when)
 import Data.Foldable (for_)
 import Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Options.Applicative
+import System.Process.Typed (proc, runProcess_)
 
 main :: IO ()
 main = do
@@ -34,11 +35,17 @@ runSnap pretend volumes = do
    now <- getCurrentTime
    for_ volumes $ \vol -> do
       putStrLn $ "vol " ++ (show vol) ++ ", now: " ++ (show now)
-      putStrLn $ "Snapping: " ++ (T.unpack $ zfs vol)
       let zinfo = getByName (TE.encodeUtf8 $ zfs vol) zz
+      let sn = snapName (T.unpack $ convention vol) now
+      putStrLn $ "Snapping: " ++ sn
+      let arg = (T.unpack $ zfs vol) ++ "@" ++ sn
       when (isNothing zinfo) $ putStrLn "Warning: volume not found"
       unless pretend $ do
-         putStrLn $ "   exec"
+         putStrLn $ "   exec: zfs snapshot " ++ arg
+         runProcess_ $ proc "zfs" ["snapshot", arg]
+
+snapName :: FormatTime t => String -> t -> String
+snapName prefix now = prefix ++ "-" ++ formatTime defaultTimeLocale "%0Y%m%d%H%M" now
 
 data AllFlags = AllFlags {
    afGlobal :: GlobalFlags,
