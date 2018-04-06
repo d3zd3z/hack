@@ -2,10 +2,18 @@
 module Main where
 
 -- import Lib
+import Hack.Zfs
 
 import Homedir
-import Config (loadConfigError)
+import Config (loadConfigError, Config(..), Snap(..), Volume(..))
+import Data.Maybe (isNothing)
+import Data.Time.Clock (getCurrentTime)
+-- import Data.Time.Format (formatTime, FormatTime, defaultTimeLocale)
+import Control.Monad (unless, when)
+import Data.Foldable (for_)
 import Data.Semigroup ((<>))
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Options.Applicative
 
 main :: IO ()
@@ -18,8 +26,19 @@ main = do
          config <- loadConfigError $ cname
          case afCommand of
             CmdSnap pretend -> do
-               putStrLn $ "Snap: " ++ show pretend
-               putStrLn $ "Config: " ++ show config
+               runSnap pretend (volumes $ snap config)
+
+runSnap :: Bool -> [Volume] -> IO ()
+runSnap pretend volumes = do
+   zz <- getZfs
+   now <- getCurrentTime
+   for_ volumes $ \vol -> do
+      putStrLn $ "vol " ++ (show vol) ++ ", now: " ++ (show now)
+      putStrLn $ "Snapping: " ++ (T.unpack $ zfs vol)
+      let zinfo = getByName (TE.encodeUtf8 $ zfs vol) zz
+      when (isNothing zinfo) $ putStrLn "Warning: volume not found"
+      unless pretend $ do
+         putStrLn $ "   exec"
 
 data AllFlags = AllFlags {
    afGlobal :: GlobalFlags,
