@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-9.17
+resolver: lts-11.3
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -64,5 +64,8 @@ extra-package-dbs: []
 #
 # Allow a newer minor version of GHC than the snapshot specifies
 # compiler-check: newer-minor
-ghc-options:
-  "$everything": -O2 -Wall -Werror
+
+# Some of the dependencies have warnings, so this doesn't work.  Try
+# '--pedantic' passed to stack build.
+#ghc-options:
+#  "$everything": -O2 -Wall -Werror
