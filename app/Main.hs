@@ -4,8 +4,7 @@ module Main where
 -- import Lib
 
 import Homedir
-import Config (loadConfig)
-import Control.Exception (throwIO)
+import Config (loadConfigError, Config(..), Snap(..), Volume(..))
 import Data.Semigroup ((<>))
 import Options.Applicative
 
@@ -16,10 +15,7 @@ main = do
    case op of
       AllFlags{..} -> do
          cname <- expandTilde $ gfConfig afGlobal
-         rconf <- loadConfig cname
-         config <- case rconf of
-            Left err -> throwIO err
-            Right c -> return c
+         config <- loadConfigError $ cname
          case afCommand of
             Snap pretend -> do
                putStrLn $ "Snap: " ++ show pretend
