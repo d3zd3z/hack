@@ -4,7 +4,7 @@ module Main where
 -- import Lib
 
 import Homedir
-import Config (loadConfigError, Config(..), Snap(..), Volume(..))
+import Config (loadConfigError)
 import Data.Semigroup ((<>))
 import Options.Applicative
 
@@ -17,7 +17,7 @@ main = do
          cname <- expandTilde $ gfConfig afGlobal
          config <- loadConfigError $ cname
          case afCommand of
-            Snap pretend -> do
+            CmdSnap pretend -> do
                putStrLn $ "Snap: " ++ show pretend
                putStrLn $ "Config: " ++ show config
 
@@ -31,7 +31,7 @@ data GlobalFlags = GlobalFlags {
    deriving Show
 
 data Commands =
-   Snap Bool
+   CmdSnap Bool
    deriving Show
 
 mainopts :: ParserInfo AllFlags
@@ -58,7 +58,7 @@ globalopt =
       help "Set the config file to use"))
 
 snapopts :: Parser Commands
-snapopts = Snap <$>
+snapopts = CmdSnap <$>
    switch (short 'n' <>
       long "pretend" <>
       help "Don't actually run, show what would have been done")
