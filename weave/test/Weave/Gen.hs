@@ -16,9 +16,9 @@ simEdits len = evalState (genPermutations [1..len]) st0
 type Gen a = State (GenState a)
 
 data GenState a = GenState {
-   targetLen :: Int,
+   targetLen :: !Int,
    newItems :: [a],
-   stateRng :: StdGen }
+   stateRng :: !StdGen }
    deriving (Show)
 
 newGen :: Int -> [a] -> GenState a
