@@ -1,0 +1,54 @@
+name:                weave
+version:             0.1.0.0
+github:              d3zd3z/hack
+license:             BSD3
+author:              David Brown
+maintainer:          davidb@davidb.org
+copyright:           2017 David Brown
+
+extra-source-files:
+  # - README.md
+  # - ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis:            Weave deltas
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/d3zd3z/hack#readme>
+
+dependencies:
+- aeson >= 1.1 && < 1.3
+- base >= 4.7 && < 5
+- bytestring >= 0.10 && < 0.11
+- containers >= 0.5 && < 0.6
+- Diff
+  # - optparse-applicative
+  # - path >= 0.5 && < 0.7
+  # - path-io >= 1.2 && < 1.4
+- time >= 1.6 && < 2.0
+  # - typed-process >= 0.1 && < 2
+- text
+  # - yaml >= 0.8 && < 0.9
+
+library:
+  source-dirs: .
+
+tests:
+  weave-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - weave
+    - mtl >= 2.2 && < 2.3
+    - random >= 1.1 && < 1.2
+    - regex-tdfa >= 1.2 && < 1.3
+    - tasty >= 1.0 && < 1.1
+    - tasty-hunit >= 0.10 && < 0.11
+    - typed-process >= 0.1 && < 2
