@@ -22,11 +22,13 @@
 
 module Hack.Weave.Parse where
 
-import Codec.Compression.GZip (decompress)
 import Data.Aeson (decode)
-import qualified Data.ByteString.Lazy as L
-import qualified Data.ByteString.Lazy.Char8 as CL
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy as LB
 import Hack.Weave.Header (Header(..))
+import System.IO.Streams (InputStream)
+import qualified System.IO.Streams as Streams
 import Text.Read (readMaybe)
 
 -- |The stream is decoded (lazily) into a sequence of the following.
@@ -35,31 +37,38 @@ data WeaveElement
    | WeaveInsert Int
    | WeaveDelete Int
    | WeaveEnd Int
-   | WeavePlain L.ByteString
-   | WeaveError L.ByteString
+   | WeavePlain B.ByteString
+   | WeaveError B.ByteString
    deriving Show
 
 readWeaveFile :: FilePath -> IO [WeaveElement]
 readWeaveFile path = do
-   comp <- L.readFile path
-   return $ weaveDecode $ decompress comp
+   Streams.withFileAsInput path $ \inp -> do
+      uninp <- Streams.gunzip inp
+      weaveDecode uninp >>= Streams.toList
 
--- |Decode a weave file into its elements.
-weaveDecode :: L.ByteString -> [WeaveElement]
-weaveDecode = map decodeOne . CL.lines
+weaveDecode :: InputStream B.ByteString -> IO (InputStream WeaveElement)
+weaveDecode inp = do
+   asLines <- Streams.lines inp
+   Streams.makeInputStream $ gen asLines
+   where
+      gen asLines = do
+         line <- Streams.read asLines
+         return $ fmap decodeOne line
 
-decodeOne :: L.ByteString -> WeaveElement
+decodeOne :: B.ByteString -> WeaveElement
 decodeOne line
-   | CL.isPrefixOf "\^At" line = getHeader line
-   | CL.isPrefixOf "\^AI " line = getNum WeaveInsert line
-   | CL.isPrefixOf "\^AD " line = getNum WeaveDelete line
-   | CL.isPrefixOf "\^AE " line = getNum WeaveEnd line
-   | CL.isPrefixOf "\^A" line = WeaveError line
+   | C8.isPrefixOf "\^At" line = getHeader line
+   | C8.isPrefixOf "\^AI " line = getNum WeaveInsert line
+   | C8.isPrefixOf "\^AD " line = getNum WeaveDelete line
+   | C8.isPrefixOf "\^AE " line = getNum WeaveEnd line
+   | C8.isPrefixOf "\^A" line = WeaveError line
    | otherwise = WeavePlain line
 
-getHeader :: L.ByteString -> WeaveElement
-getHeader line = maybe (WeaveError line) WeaveHeader $ decode $ CL.drop 2 line
+getHeader :: B.ByteString -> WeaveElement
+getHeader line = maybe (WeaveError line) WeaveHeader $ decode $
+   LB.fromStrict $ C8.drop 2 line
 
-getNum :: (Int -> WeaveElement) -> L.ByteString -> WeaveElement
+getNum :: (Int -> WeaveElement) -> B.ByteString -> WeaveElement
 getNum enc line =
-   maybe (WeaveError line) enc $ readMaybe $ CL.unpack $ CL.drop 3 line
+   maybe (WeaveError line) enc $ readMaybe $ C8.unpack $ C8.drop 3 line
