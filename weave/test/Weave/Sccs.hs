@@ -5,9 +5,15 @@ module Weave.Sccs (
 ) where
 
 import Control.Exception (Handler(..), IOException, catches)
+import Control.Monad.Reader
 import Data.ByteString (ByteString)
 import System.Process.Typed (ExitCodeException, proc, readProcess_)
 import Text.Regex.TDFA ((=~))
+
+data Env = Env {
+   tempDir :: FilePath }
+
+type EnvIO = ReaderT Env IO
 
 -- In order to compare what we generate with what Sccs does, this test
 -- invokes the external 'sccs' command
@@ -39,5 +45,5 @@ goodSccs = "sccs from GNU CSSC.*"
 
 -- |Output all of the given items as individual lines to the given
 -- named file.
--- saveLines :: Show a => FilePath -> [a] -> IO ()
--- saveLines fname = writeFile fname . unlines . map show
+saveLines :: Show a => FilePath -> [a] -> IO ()
+saveLines fname = writeFile fname . unlines . map show

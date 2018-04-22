@@ -32,6 +32,7 @@ dependencies:
   # - typed-process >= 0.1 && < 2
 - text
   # - yaml >= 0.8 && < 0.9
+- zlib >= 0.6 && < 0.7
 
 library:
   source-dirs: .
