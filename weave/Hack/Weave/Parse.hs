@@ -21,10 +21,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hack.Weave.Parse (
-   WeaveElement(..),
    readWeaveFile,
    readZWeaveFile,
-   weaveParse
+   weaveParse,
+   weaveDecode
 ) where
 
 import Data.Aeson (decode)
@@ -34,22 +34,10 @@ import qualified Data.ByteString.Lazy as LB
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.IORef
-import Hack.Weave.Header (Header(..))
+import Hack.Weave.Types (WeaveElement(..))
 import System.IO.Streams (InputStream)
 import qualified System.IO.Streams as Streams
 import Text.Read (readMaybe)
-
--- |The stream is decoded into a Stream of the following.  The
--- WeavePlain lines will eventually get line number and 'keep'
--- information associated with them, although this is added later.
-data WeaveElement
-   = WeaveHeader Header
-   | WeaveInsert Int
-   | WeaveDelete Int
-   | WeaveEnd Int
-   | WeavePlain B.ByteString (Maybe Int)
-   | WeaveError B.ByteString
-   deriving Show
 
 readZWeaveFile :: FilePath -> Int -> IO [WeaveElement]
 readZWeaveFile path delta = do

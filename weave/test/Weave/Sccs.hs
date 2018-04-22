@@ -6,6 +6,7 @@ module Weave.Sccs (
 ) where
 
 import Hack.Weave.Parse
+import Hack.Weave.Types
 import Weave.Gen
 
 import Control.Exception (Handler(..), IOException, catches)
