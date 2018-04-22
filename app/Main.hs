@@ -29,7 +29,7 @@ main = do
             CmdSnap pretend -> do
                runSnap pretend (volumes $ snap config)
             CmdWeave -> do
-               len <- length <$> readWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
+               len <- length <$> readZWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
                putStrLn $ show len
 
 runSnap :: Bool -> [Volume] -> IO ()

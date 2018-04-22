@@ -23,6 +23,7 @@
 module Hack.Weave.Parse (
    WeaveElement(..),
    readWeaveFile,
+   readZWeaveFile,
    weaveParse
 ) where
 
@@ -50,11 +51,16 @@ data WeaveElement
    | WeaveError B.ByteString
    deriving Show
 
-readWeaveFile :: FilePath -> Int -> IO [WeaveElement]
-readWeaveFile path delta = do
+readZWeaveFile :: FilePath -> Int -> IO [WeaveElement]
+readZWeaveFile path delta = do
    Streams.withFileAsInput path $ \inp -> do
       uninp <- Streams.gunzip inp
       weaveDecode uninp >>= weaveParse delta >>= Streams.toList
+
+readWeaveFile :: FilePath -> Int -> IO [WeaveElement]
+readWeaveFile path delta = do
+   Streams.withFileAsInput path $ \inp -> do
+      weaveDecode inp >>= weaveParse delta >>= Streams.toList
 
 -- |By tracking the insert/delete/end state, augment any "plain" lines
 -- adding a line number, and a flag indicating if it should be kept by
