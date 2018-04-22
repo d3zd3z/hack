@@ -2,7 +2,7 @@
 
 module Weave.Sccs (
    haveSccs,
-   initVersion
+   runManyDeltas
 ) where
 
 import Hack.Weave.Parse
@@ -29,8 +29,8 @@ data Env = Env {
 
 type EnvIO = ReaderT Env IO
 
-hack :: IO ()
-hack = do
+runManyDeltas :: IO ()
+runManyDeltas = do
    withSystemTempDirectory "weave" $ \tdir -> do
       let env = (Env { tempDir = tdir })
       putStrLn $ show env
