@@ -20,32 +20,95 @@
 
 {-# LANGUAGE OverloadedStrings #-}
 
-module Hack.Weave.Parse where
+module Hack.Weave.Parse (
+   WeaveElement(..),
+   readWeaveFile,
+   weaveParse
+) where
 
 import Data.Aeson (decode)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
+import qualified Data.Map.Strict as Map
+import Data.Map.Strict (Map)
+import Data.IORef
 import Hack.Weave.Header (Header(..))
 import System.IO.Streams (InputStream)
 import qualified System.IO.Streams as Streams
 import Text.Read (readMaybe)
 
--- |The stream is decoded (lazily) into a sequence of the following.
+-- |The stream is decoded into a Stream of the following.  The
+-- WeavePlain lines will eventually get line number and 'keep'
+-- information associated with them, although this is added later.
 data WeaveElement
    = WeaveHeader Header
    | WeaveInsert Int
    | WeaveDelete Int
    | WeaveEnd Int
-   | WeavePlain B.ByteString
+   | WeavePlain B.ByteString (Maybe Int)
    | WeaveError B.ByteString
    deriving Show
 
-readWeaveFile :: FilePath -> IO [WeaveElement]
-readWeaveFile path = do
+readWeaveFile :: FilePath -> Int -> IO [WeaveElement]
+readWeaveFile path delta = do
    Streams.withFileAsInput path $ \inp -> do
       uninp <- Streams.gunzip inp
-      weaveDecode uninp >>= Streams.toList
+      weaveDecode uninp >>= weaveParse delta >>= Streams.toList
+
+-- |By tracking the insert/delete/end state, augment any "plain" lines
+-- adding a line number, and a flag indicating if it should be kept by
+-- for the specified delta.  Nothing indicates not to keep, and Just n
+-- indicates it should be kept, with the given line number.
+--
+-- TODO: This is written rather imperatively, mostly because of how
+-- streams seems to work.
+weaveParse :: Int -> InputStream WeaveElement -> IO (InputStream WeaveElement)
+weaveParse delta source = do
+   state <- newIORef Map.empty
+   lineno <- newIORef 0
+   keeping <- newIORef False
+   let
+      update elt = do
+         st <- readIORef state
+         writeIORef keeping $ keepState st
+         return elt
+      gen = do
+         elt <- Streams.read source
+         case elt of
+            Just (WeaveInsert dl) -> do
+               let nstate = if delta >= dl then Keep else Skip
+               modifyIORef' state (Map.insert dl nstate)
+               update elt
+            Just (WeaveDelete dl) -> do
+               let nstate = if delta >= dl then Skip else Next
+               modifyIORef' state (Map.insert dl nstate)
+               update elt
+            Just (WeaveEnd dl) -> do
+               modifyIORef' state (Map.delete dl)
+               update elt
+            Just (WeavePlain text _) -> do
+               kp <- readIORef keeping
+               if kp then do
+                  modifyIORef' lineno (1+)
+                  ln <- readIORef lineno
+                  return $ Just $ WeavePlain text (Just ln)
+               else do
+                  return $ Just $ WeavePlain text Nothing
+            other -> return other
+   Streams.makeInputStream gen
+
+data State = Keep | Skip | Next
+
+-- Walk through states, which must be in order by largest delta,
+-- taking the first of "Keep" or "Skip", as true/false, ignoring any
+-- that are next.  Returns false if there are no entries.
+keepState :: Map Int State -> Bool
+keepState = Map.foldl op False
+   where
+      op _ Keep = True
+      op _ Skip = False
+      op b Next = b
 
 weaveDecode :: InputStream B.ByteString -> IO (InputStream WeaveElement)
 weaveDecode inp = do
@@ -63,7 +126,7 @@ decodeOne line
    | C8.isPrefixOf "\^AD " line = getNum WeaveDelete line
    | C8.isPrefixOf "\^AE " line = getNum WeaveEnd line
    | C8.isPrefixOf "\^A" line = WeaveError line
-   | otherwise = WeavePlain line
+   | otherwise = WeavePlain line Nothing
 
 getHeader :: B.ByteString -> WeaveElement
 getHeader line = maybe (WeaveError line) WeaveHeader $ decode $

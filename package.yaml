@@ -31,6 +31,7 @@ dependencies:
 - typed-process >= 0.1 && < 2
 - text
 - yaml >= 0.8 && < 0.9
+- weave
 
 library:
   source-dirs: src

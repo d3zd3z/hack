@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
--- import Lib
+import Hack.Weave.Parse
 import Hack.Zfs
 
 import Homedir
@@ -28,6 +28,9 @@ main = do
          case afCommand of
             CmdSnap pretend -> do
                runSnap pretend (volumes $ snap config)
+            CmdWeave -> do
+               len <- length <$> readWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
+               putStrLn $ show len
 
 runSnap :: Bool -> [Volume] -> IO ()
 runSnap pretend volumes = do
@@ -58,6 +61,7 @@ data GlobalFlags = GlobalFlags {
 
 data Commands =
    CmdSnap Bool
+   | CmdWeave
    deriving Show
 
 mainopts :: ParserInfo AllFlags
@@ -72,7 +76,8 @@ allopts =
 
 subcmd :: Parser Commands
 subcmd = subparser (
-   command "snap" (info (snapopts <**> helper) idm))
+   command "snap" (info (snapopts <**> helper) idm)
+   <> command "weave" (info (weaveopts <**> helper) idm))
 
 globalopt :: Parser GlobalFlags
 globalopt =
@@ -88,3 +93,6 @@ snapopts = CmdSnap <$>
    switch (short 'n' <>
       long "pretend" <>
       help "Don't actually run, show what would have been done")
+
+weaveopts :: Parser Commands
+weaveopts = pure CmdWeave
