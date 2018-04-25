@@ -30,6 +30,8 @@ dependencies:
 - time >= 1.6 && < 2.0
 - typed-process >= 0.1 && < 2
 - text
+- unix >= 2.7 && < 2.8
+- vector >= 0.12 && < 0.13
 - yaml >= 0.8 && < 0.9
 - weave
 
@@ -37,7 +39,7 @@ library:
   source-dirs: src
 
 executables:
-  hack-exe:
+  hack:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

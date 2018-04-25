@@ -3,9 +3,11 @@ module Main where
 
 import Hack.Weave.Parse
 import Hack.Zfs
+import Sure.Walk
 
 import Homedir
 import Config (loadConfigError, Config(..), Snap(..), Volume(..))
+import qualified Data.ByteString.Char8 as B
 import Data.Maybe (isNothing)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, FormatTime, defaultTimeLocale)
@@ -14,6 +16,7 @@ import Data.Foldable (for_)
 import Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.Vector as V
 import Options.Applicative
 import System.Process.Typed (proc, runProcess_)
 
@@ -31,6 +34,14 @@ main = do
             CmdWeave -> do
                len <- length <$> readZWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
                putStrLn $ show len
+            CmdWalk dir -> do
+               putStrLn $ "Walking: " ++ dir
+               tree <- walk $ B.pack dir
+               putStrLn $ "Counting"
+               putStrLn $ show (countNodes tree) ++ " nodes"
+
+countNodes :: SureTree -> Int
+countNodes SureTree{..} = 1 + V.length stFiles + V.sum (V.map countNodes stChildren)
 
 runSnap :: Bool -> [Volume] -> IO ()
 runSnap pretend volumes = do
@@ -62,6 +73,7 @@ data GlobalFlags = GlobalFlags {
 data Commands =
    CmdSnap Bool
    | CmdWeave
+   | CmdWalk String
    deriving Show
 
 mainopts :: ParserInfo AllFlags
@@ -77,7 +89,8 @@ allopts =
 subcmd :: Parser Commands
 subcmd = subparser (
    command "snap" (info (snapopts <**> helper) idm)
-   <> command "weave" (info (weaveopts <**> helper) idm))
+   <> command "weave" (info (weaveopts <**> helper) idm)
+   <> command "walk" (info (walkopts <**> helper) idm))
 
 globalopt :: Parser GlobalFlags
 globalopt =
@@ -96,3 +109,6 @@ snapopts = CmdSnap <$>
 
 weaveopts :: Parser Commands
 weaveopts = pure CmdWeave
+
+walkopts :: Parser Commands
+walkopts = CmdWalk <$> argument str (metavar "DIR")
