@@ -17,22 +17,10 @@ import Data.List (partition, sortOn)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
 import qualified Data.Vector as V
-import Data.Vector (Vector)
 import System.IO.Error (isUserError)
 import qualified System.Posix.ByteString as P
 
--- |The top of a suretree.
-data SureTree = SureTree {
-   stName :: !B.ByteString,
-   stAtts :: !AttMap,
-   stChildren :: !(Vector SureTree),
-   stFiles :: !(Vector SureFile) }
-   deriving Show
-
-data SureFile = SureFile {
-   sfName :: !B.ByteString,
-   sfAtts :: !AttMap }
-   deriving Show
+import Sure.Types (SureTree(..), SureFile(..))
 
 -- |Walk a filesystem, loading a tree into memory of all of the easily
 -- gathered information.  The path should be a name that will resolve

@@ -14,14 +14,10 @@ import Control.Monad (guard)
 import Data.Bits ((.&.), complement, shiftR)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map.Strict as Map
-import Data.Map.Strict (Map)
 import System.IO.Error (isUserError)
 import qualified System.Posix.ByteString as P
 
--- |An attribute maintains a k/v mapping for the filesystem mappings.
--- Everything is treated as ascii strings, with a special escaping
--- used for things that came from strings that are user specified.
-type AttMap = Map B.ByteString B.ByteString
+import Sure.Types (AttMap)
 
 type Converter = P.FileStatus -> IO (B.ByteString, B.ByteString)
 
