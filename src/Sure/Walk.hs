@@ -31,7 +31,7 @@ walk path = do
    atts <- getAtts path stat
    unless (isDir atts) $ do
       throwIO $ userError $ "Given path is not a directory: " ++ show path
-   walkDir path atts
+   fixRoot <$> walkDir path atts
 
 -- |Walk a particular directory, having retrieve the attributes for
 -- it.
@@ -50,6 +50,12 @@ walkDir path atts = do
 
 subWalk :: P.RawFilePath -> [(P.RawFilePath, AttMap)] -> IO [SureTree]
 subWalk dirPath = mapM (\(name, atts) -> walkDir (dirPath <> "/" <> name) atts)
+
+-- | Fix the root directory.  Instead of encoding the name that was
+-- passed in to traverse, replace with "__root__" so that we can
+-- compare the directory at any mountpoint.
+fixRoot :: SureTree -> SureTree
+fixRoot tree = tree { stName = "__root__" }
 
 -- |Get all of the names in a given directory, stat all of them (in
 -- dir order), and sort and return the ones that were possible to
