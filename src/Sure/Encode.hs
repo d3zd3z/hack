@@ -21,9 +21,12 @@ import Sure.Types
 -- | Linearize an encoding of a SureTree into a '[B.ByteString]' that
 -- can by re-decoded back to the tree later.
 treeEncode :: SureTree -> [B.ByteString]
-treeEncode SureTree{..} =
+treeEncode tree = "asure-2.0" : "-----" : treeEncode' tree
+
+treeEncode' :: SureTree -> [B.ByteString]
+treeEncode' SureTree{..} =
    oneNode 'd' stName stAtts :
-   concatMap treeEncode (V.toList stChildren) ++
+   concatMap treeEncode' (V.toList stChildren) ++
    ["-"] ++
    (map fileEncode $ V.toList stFiles) ++
    ["u"]
