@@ -8,18 +8,20 @@ import Data.Maybe (isNothing)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, FormatTime, defaultTimeLocale)
 import Control.Monad (unless, when)
+import Control.Monad.Loops (whileM)
 import Data.Foldable (for_)
 import Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import Options.Applicative
-import System.IO (withBinaryFile, IOMode(..))
+import System.IO (hIsEOF, withBinaryFile, IOMode(..))
 import System.Process.Typed (proc, runProcess_)
 
 import Hack.Weave.Parse
 import Hack.Zfs
 import Sure.Encode
+import Sure.Decode
 import Sure.Walk
 
 main :: IO ()
@@ -43,6 +45,13 @@ main = do
                putStrLn $ show (countNodes tree) ++ " nodes"
                withBinaryFile "sample.dat" WriteMode $ \h -> do
                   mapM_ (B.hPutStrLn h) $ treeEncode tree
+            CmdLoad -> do
+               putStrLn $ "Loading"
+               lns <- withBinaryFile "sample.dat" ReadMode $ \h ->
+                  whileM (not <$> hIsEOF h) $ B.hGetLine h
+               let tree = sureFileParser $ map decodeLine lns
+               putStrLn $ "Counting: " ++ show (stName tree)
+               putStrLn $ show (countNodes tree) ++ " nodes"
 
 countNodes :: SureTree -> Int
 countNodes SureTree{..} = 1 + V.length stFiles + V.sum (V.map countNodes stChildren)
@@ -78,6 +87,7 @@ data Commands =
    CmdSnap Bool
    | CmdWeave
    | CmdWalk String
+   | CmdLoad
    deriving Show
 
 mainopts :: ParserInfo AllFlags
@@ -94,7 +104,8 @@ subcmd :: Parser Commands
 subcmd = subparser (
    command "snap" (info (snapopts <**> helper) idm)
    <> command "weave" (info (weaveopts <**> helper) idm)
-   <> command "walk" (info (walkopts <**> helper) idm))
+   <> command "walk" (info (walkopts <**> helper) idm)
+   <> command "load" (info (loadopts <**> helper) idm))
 
 globalopt :: Parser GlobalFlags
 globalopt =
@@ -116,3 +127,6 @@ weaveopts = pure CmdWeave
 
 walkopts :: Parser Commands
 walkopts = CmdWalk <$> argument str (metavar "DIR")
+
+loadopts :: Parser Commands
+loadopts = pure CmdLoad
