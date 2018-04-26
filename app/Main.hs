@@ -1,10 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Hack.Weave.Parse
-import Hack.Zfs
-import Sure.Walk
-
 import Homedir
 import Config (loadConfigError, Config(..), Snap(..), Volume(..))
 import qualified Data.ByteString.Char8 as B
@@ -18,7 +14,13 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import Options.Applicative
+import System.IO (withBinaryFile, IOMode(..))
 import System.Process.Typed (proc, runProcess_)
+
+import Hack.Weave.Parse
+import Hack.Zfs
+import Sure.Encode
+import Sure.Walk
 
 main :: IO ()
 main = do
@@ -39,6 +41,8 @@ main = do
                tree <- walk $ B.pack dir
                putStrLn $ "Counting"
                putStrLn $ show (countNodes tree) ++ " nodes"
+               withBinaryFile "sample.dat" WriteMode $ \h -> do
+                  mapM_ (B.hPutStrLn h) $ treeEncode tree
 
 countNodes :: SureTree -> Int
 countNodes SureTree{..} = 1 + V.length stFiles + V.sum (V.map countNodes stChildren)
