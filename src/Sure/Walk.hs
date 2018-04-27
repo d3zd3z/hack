@@ -12,6 +12,7 @@ import Sure.Atts (AttMap, getAtts, isDir)
 
 import Control.Exception (bracket, throwIO, tryJust)
 import Control.Monad (guard, forM, unless)
+import Control.Monad.State.Strict
 import qualified Data.ByteString.Char8 as B
 import Data.List (partition, sortOn)
 import Data.Maybe (catMaybes)
@@ -20,22 +21,43 @@ import qualified Data.Vector as V
 import System.IO.Error (isUserError)
 import qualified System.Posix.ByteString as P
 
+import Text.Human
+import Text.Progress
 import Sure.Types (SureTree(..), SureFile(..))
+
+-- The progress meter.
+data Meter = Meter {
+   mPm :: !PMeter,
+   mDirs :: !Integer,
+   mFiles :: !Integer,
+   mBytes :: !Integer }
+
+type MeterIO = StateT Meter IO
 
 -- |Walk a filesystem, loading a tree into memory of all of the easily
 -- gathered information.  The path should be a name that will resolve
 -- from the current directory (relative from there, or absolute).
 walk :: P.RawFilePath -> IO SureTree
 walk path = do
-   stat <- P.getSymbolicLinkStatus path
-   atts <- getAtts path stat
-   unless (isDir atts) $ do
-      throwIO $ userError $ "Given path is not a directory: " ++ show path
-   fixRoot <$> walkDir path atts
+   withPMeter $ \pm -> do
+      let meter = Meter {
+         mPm = pm,
+         mDirs = 0,
+         mFiles = 0,
+         mBytes = 0 }
+      evalStateT action meter
+   where
+      action :: MeterIO SureTree
+      action = do
+         stat <- lift $ P.getSymbolicLinkStatus path
+         atts <- lift $ getAtts path stat
+         unless (isDir atts) $ do
+            lift $ throwIO $ userError $ "Given path is not a directory: " ++ show path
+         fixRoot <$> walkDir path atts
 
 -- |Walk a particular directory, having retrieve the attributes for
 -- it.
-walkDir :: P.RawFilePath -> AttMap -> IO SureTree
+walkDir :: P.RawFilePath -> AttMap -> MeterIO SureTree
 walkDir path atts = do
    -- putStrLn $ "Walking: " ++ show path
    (dirs1, nondirs1) <- (partition (isDir . snd)) <$> getDir path
@@ -48,7 +70,7 @@ walkDir path atts = do
       stChildren = V.fromList children,
       stFiles = V.fromList $ map (uncurry SureFile) nondirs }
 
-subWalk :: P.RawFilePath -> [(P.RawFilePath, AttMap)] -> IO [SureTree]
+subWalk :: P.RawFilePath -> [(P.RawFilePath, AttMap)] -> MeterIO [SureTree]
 subWalk dirPath = mapM (\(name, atts) -> walkDir (dirPath <> "/" <> name) atts)
 
 -- | Fix the root directory.  Instead of encoding the name that was
@@ -60,13 +82,31 @@ fixRoot tree = tree { stName = "__root__" }
 -- |Get all of the names in a given directory, stat all of them (in
 -- dir order), and sort and return the ones that were possible to
 -- stat.
-getDir :: P.RawFilePath -> IO [(P.RawFilePath, AttMap)]
+getDir :: P.RawFilePath -> MeterIO [(P.RawFilePath, AttMap)]
 getDir dir = do
-   names <- maybe [] id <$> safely (getDirEntries dir)
-   stats <- mapM (statFile dir) names
-   forM (catMaybes $ map liftMaybe2 $ zip names stats) $ \(name, stat) -> do
+   names <- lift (maybe [] id <$> safely (getDirEntries dir))
+   stats <- lift $ mapM (statFile dir) names
+   update $ catMaybes stats
+   lift $ forM (catMaybes $ map liftMaybe2 $ zip names stats) $ \(name, stat) -> do
       atts <- getAtts name stat
       return $ (name, atts)
+
+-- |Update the statistics based on the stats given.
+update :: [P.FileStatus] -> MeterIO ()
+update stats = do
+   let (dirs, files) = partition P.isDirectory stats
+   let bytes = sum $ map (fromIntegral . P.fileSize) files
+   pm <- get
+   let newDirs = mDirs pm + (fromIntegral $ length dirs)
+   let newFiles = mFiles pm + (fromIntegral $ length files)
+   let newBytes = bytes + mBytes pm
+   lift $ pmPut (mPm pm) $ "scan: " ++ show newDirs ++
+      " dirs, " ++ show newFiles ++
+      " files, " ++ humanizeBytes newBytes ++ " bytes"
+   put $! pm {
+      mDirs = newDirs,
+      mFiles = newFiles,
+      mBytes = newBytes }
 
 -- |Read all of the names of entities in a given directory.  Removes
 -- "." and ".." from the results.

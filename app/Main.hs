@@ -16,6 +16,7 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Vector as V
 import Options.Applicative
 import System.IO (hIsEOF, withBinaryFile, IOMode(..))
+import System.Log.Logger
 import System.Process.Typed (proc, runProcess_)
 
 import Hack.Weave.Parse
@@ -26,6 +27,10 @@ import Sure.Walk
 
 main :: IO ()
 main = do
+   -- updateGlobalLogger "main" $ \lg ->
+   updateGlobalLogger rootLoggerName removeHandler
+   warningM "main" $ "Root logger: " ++ show rootLoggerName
+   warningM "main" "This is a log message"
    op <- execParser mainopts
    putStrLn $ show op
    case op of
