@@ -64,3 +64,5 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - hack
+    - tasty >= 1.0 && < 1.1
+    - tasty-hunit >= 0.10 && < 0.11
