@@ -7,6 +7,7 @@ module Data.Weave.Header (
 
    addDelta,
    highestDelta,
+   firstHeader
 ) where
 
 import Data.Aeson.TH
@@ -48,6 +49,18 @@ addDelta name tags hdr = do
       tags = tags,
       time = now }
    return $ hdr { deltas = newDelta : dlt }
+
+-- |Construct the first delta.
+firstHeader :: Text -> Map Text Text -> IO Header
+firstHeader name tags = do
+    now <- getCurrentTime
+    return $ Header {
+        version = 1,
+        deltas = [DeltaInfo {
+            name = name,
+            number = 1,
+            tags = tags,
+            time = now }] }
 
 -- Given some deltas, returns the highest delta number, or zero if
 -- there are none.

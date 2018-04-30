@@ -10,6 +10,7 @@ module Text.Progress (
 ) where
 
 import Control.Concurrent.MVar
+import Control.Monad.IO.Class
 import Data.Time.Clock
 
 -- A progress meter consists of some text that can be updated
@@ -38,11 +39,11 @@ interval = 0.250
 
 -- |Perform an action with a progress meter, flushing when done.  If
 -- an exception is raised, the current display will be left in place.
-withPMeter :: (PMeter -> IO a) -> IO a
+withPMeter :: MonadIO m => (PMeter -> m a) -> m a
 withPMeter action = do
-    pmeter <- newPMeter
+    pmeter <- liftIO newPMeter
     result <- action pmeter
-    pmFlush pmeter
+    liftIO $ pmFlush pmeter
     return result
 
 -- |Construct a new progress meter.  It will initially be blank.

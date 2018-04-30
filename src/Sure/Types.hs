@@ -3,7 +3,8 @@
 module Sure.Types (
    AttMap,
    SureTree(..),
-   SureFile(..)
+   SureFile(..),
+   SureNode(..)
 ) where
 
 import qualified Data.ByteString as B
@@ -28,3 +29,10 @@ data SureFile = SureFile {
    sfAtts :: !AttMap }
    deriving Show
 
+-- |The tree traversal is a SureNode.
+data SureNode =
+    SureEnter !B.ByteString !AttMap |
+    SureLeave |
+    SureSep |
+    SureNode !B.ByteString !AttMap
+    deriving Show

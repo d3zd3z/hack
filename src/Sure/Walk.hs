@@ -1,10 +1,10 @@
 -- |Filesystem walking
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Sure.Walk (
-   SureTree(..),
-   SureFile(..),
+   SureNode(..),
    walk
 ) where
 
@@ -17,13 +17,13 @@ import qualified Data.ByteString.Char8 as B
 import Data.List (partition, sortOn)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
-import qualified Data.Vector as V
+import Pipes
 import System.IO.Error (isUserError)
 import qualified System.Posix.ByteString as P
 
 import Text.Human
 import Text.Progress
-import Sure.Types (SureTree(..), SureFile(..))
+import Sure.Types (SureNode(..))
 
 -- The progress meter.
 data Meter = Meter {
@@ -32,64 +32,51 @@ data Meter = Meter {
    mFiles :: !Integer,
    mBytes :: !Integer }
 
-type MeterIO = StateT Meter IO
+type MeterIO = StateT Meter (Producer SureNode IO)
 
--- |Walk a filesystem, loading a tree into memory of all of the easily
--- gathered information.  The path should be a name that will resolve
--- from the current directory (relative from there, or absolute).
-walk :: P.RawFilePath -> IO SureTree
+-- |A stream that walks a filesystem, yielding all of the in an
+-- in-order depth-first traversal of the tree.
+walk :: P.RawFilePath -> Producer SureNode IO ()
 walk path = do
-   withPMeter $ \pm -> do
-      let meter = Meter {
-         mPm = pm,
-         mDirs = 0,
-         mFiles = 0,
-         mBytes = 0 }
-      evalStateT action meter
-   where
-      action :: MeterIO SureTree
-      action = do
-         stat <- lift $ P.getSymbolicLinkStatus path
-         atts <- lift $ getAtts path stat
-         unless (isDir atts) $ do
-            lift $ throwIO $ userError $ "Given path is not a directory: " ++ show path
-         fixRoot <$> walkDir path atts
+    withPMeter $ \pm -> do
+        let meter = Meter {
+            mPm = pm,
+            mDirs = 0,
+            mFiles = 0,
+            mBytes = 0 }
+        evalStateT action meter
+    where
+        -- action :: MonadIO m => MeterIO m
+        action = do
+            stat <- liftIO $ P.getSymbolicLinkStatus path
+            atts <- liftIO $ getAtts path stat
+            unless (isDir atts) $ do
+                liftIO $ throwIO $ userError $ "Given path is not a directory: " ++ show path
+            -- TODO: Fix the root name.
+            walkDir path "__root__" atts
 
--- |Walk a particular directory, having retrieve the attributes for
--- it.
-walkDir :: P.RawFilePath -> AttMap -> MeterIO SureTree
-walkDir path atts = do
-   -- putStrLn $ "Walking: " ++ show path
-   (dirs1, nondirs1) <- (partition (isDir . snd)) <$> getDir path
-   let dirs = sortOn fst dirs1
-   let nondirs = sortOn fst nondirs1
-   children <- subWalk path dirs
-   return $ SureTree {
-      stName = path,
-      stAtts = atts,
-      stChildren = V.fromList children,
-      stFiles = V.fromList $ map (uncurry SureFile) nondirs }
+walkDir :: P.RawFilePath -> P.RawFilePath -> AttMap -> MeterIO ()
+walkDir path name atts = do
+    (dirs1, nondirs1) <- (partition (isDir . snd)) <$> getDir path
+    let dirs = sortOn fst dirs1
+    let nondirs = sortOn fst nondirs1
+    lift $ yield $ SureEnter name atts
+    subWalk path dirs
+    lift $ yield SureSep
+    lift $ each $ map (uncurry SureNode) nondirs
+    lift $ yield SureLeave
 
-subWalk :: P.RawFilePath -> [(P.RawFilePath, AttMap)] -> MeterIO [SureTree]
-subWalk dirPath = mapM (\(name, atts) -> walkDir (dirPath <> "/" <> name) atts)
+subWalk :: P.RawFilePath -> [(P.RawFilePath, AttMap)] -> MeterIO ()
+subWalk dirPath = mapM_ (\(name, atts) -> walkDir (dirPath <> "/" <> name) name atts)
 
--- | Fix the root directory.  Instead of encoding the name that was
--- passed in to traverse, replace with "__root__" so that we can
--- compare the directory at any mountpoint.
-fixRoot :: SureTree -> SureTree
-fixRoot tree = tree { stName = "__root__" }
-
--- |Get all of the names in a given directory, stat all of them (in
--- dir order), and sort and return the ones that were possible to
--- stat.
 getDir :: P.RawFilePath -> MeterIO [(P.RawFilePath, AttMap)]
 getDir dir = do
-   names <- lift (maybe [] id <$> safely (getDirEntries dir))
-   stats <- lift $ mapM (statFile dir) names
-   update $ catMaybes stats
-   lift $ forM (catMaybes $ map liftMaybe2 $ zip names stats) $ \(name, stat) -> do
-      atts <- getAtts name stat
-      return $ (name, atts)
+    names <- liftIO (maybe [] id <$> safely (getDirEntries dir))
+    stats <- liftIO $ mapM (statFile dir) names
+    update $ catMaybes stats
+    liftIO $ forM (catMaybes $ map liftMaybe2 $ zip names stats) $ \(name, stat) -> do
+        atts <- getAtts name stat
+        return $ (name, atts)
 
 -- |Update the statistics based on the stats given.
 update :: [P.FileStatus] -> MeterIO ()
@@ -100,7 +87,7 @@ update stats = do
    let newDirs = mDirs pm + (fromIntegral $ length dirs)
    let newFiles = mFiles pm + (fromIntegral $ length files)
    let newBytes = bytes + mBytes pm
-   lift $ pmPut (mPm pm) $ "scan: " ++ show newDirs ++
+   liftIO $ pmPut (mPm pm) $ "scan: " ++ show newDirs ++
       " dirs, " ++ show newFiles ++
       " files, " ++ humanizeBytes newBytes ++ " bytes"
    put $! pm {

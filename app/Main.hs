@@ -8,22 +8,17 @@ import Data.Maybe (isNothing)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (formatTime, FormatTime, defaultTimeLocale)
 import Control.Monad (unless, when)
-import Control.Monad.Loops (whileM)
 import Data.Foldable (for_)
 import Data.Semigroup ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import qualified Data.Vector as V
 import Options.Applicative
-import System.IO (hIsEOF, withBinaryFile, IOMode(..))
 import System.Log.Logger
 import System.Process.Typed (proc, runProcess_)
 
 import Hack.Weave.Parse
 import Hack.Zfs
-import Sure.Encode
-import Sure.Decode
-import Sure.Walk
+import Sure
 
 main :: IO ()
 main = do
@@ -45,21 +40,18 @@ main = do
                putStrLn $ show len
             CmdWalk dir -> do
                putStrLn $ "Walking: " ++ dir
-               tree <- walk $ B.pack dir
-               putStrLn $ "Counting"
-               putStrLn $ show (countNodes tree) ++ " nodes"
-               withBinaryFile "sample.dat" WriteMode $ \h -> do
-                  mapM_ (B.hPutStrLn h) $ treeEncode tree
+               tmp <- simpleWalk basicNaming $ B.pack dir
+               putStrLn $ "Written to: " ++ show tmp
             CmdLoad -> do
                putStrLn $ "Loading"
+               undefined
+               {-
                lns <- withBinaryFile "sample.dat" ReadMode $ \h ->
                   whileM (not <$> hIsEOF h) $ B.hGetLine h
                let tree = sureFileParser $ map decodeLine lns
                putStrLn $ "Counting: " ++ show (stName tree)
                putStrLn $ show (countNodes tree) ++ " nodes"
-
-countNodes :: SureTree -> Int
-countNodes SureTree{..} = 1 + V.length stFiles + V.sum (V.map countNodes stChildren)
+               -}
 
 runSnap :: Bool -> [Volume] -> IO ()
 runSnap pretend volumes = do
