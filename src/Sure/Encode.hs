@@ -4,7 +4,8 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Sure.Encode (
-   treeEncode
+   treeEncode,
+   sureEncoder
 ) where
 
 import qualified Data.ByteString as B
@@ -15,6 +16,7 @@ import Data.Char (ord)
 import qualified Data.Map.Strict as Map
 import Data.Monoid ((<>))
 import qualified Data.Vector as V
+import Pipes
 
 import Sure.Types
 
@@ -36,6 +38,23 @@ oneNode key name atts = L.toStrict $ B.toLazyByteString encode
    where
       encode = B.char7 key <> escape name <> B.char7 ' ' <>
          encodeAtts atts
+
+sureEncoder :: Monad m => Pipe SureNode B.ByteString m ()
+sureEncoder = do
+    yield "asure-2.0"
+    yield "-----"
+    for cat $ yield . L.toStrict . B.toLazyByteString . encodeSureNode
+
+encodeSureNode :: SureNode -> B.Builder
+encodeSureNode (SureEnter name atts) = encodeNode 'd' name atts
+encodeSureNode SureLeave             = B.char7 'u'
+encodeSureNode SureSep               = B.char7 '-'
+encodeSureNode (SureNode name atts)  = encodeNode 'f' name atts
+
+encodeNode :: Char -> B.ByteString -> AttMap -> B.Builder
+encodeNode key name atts = B.char7 key <>
+    escape name <> B.char7 ' ' <>
+    encodeAtts atts
 
 fileEncode :: SureFile -> B.ByteString
 fileEncode SureFile{..} = oneNode 'f' sfName sfAtts
