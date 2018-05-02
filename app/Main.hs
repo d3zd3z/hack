@@ -44,6 +44,8 @@ main = do
                putStrLn $ "Written to: " ++ show tmp
                est <- estimateHashes tmp
                putStrLn $ "Estimate: " ++ show est
+               tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
+               putStrLn $ "Written to: " ++ show tmp2
             CmdLoad -> do
                putStrLn $ "Loading"
                undefined

@@ -7,6 +7,7 @@ module Sure (
     basicNaming,
     simpleWalk,
     estimateHashes,
+    updateHashes,
 
     showOut
 ) where
@@ -24,7 +25,9 @@ import Sure.Decode (sureNodeParser)
 import Sure.Encode (sureEncoder)
 import qualified Sure.Hashes as SH
 import Sure.Hashes (HashProgress(..))
+import Sure.Types (addDirs)
 import Sure.Walk (walk)
+import Text.Progress (withPMeter)
 
 basicNaming :: SimpleNaming
 basicNaming = SimpleNaming "./2sure" "dat" True
@@ -45,14 +48,18 @@ estimateHashes path = do
         let lns = folds mappend B.empty id $ view PB.lines $ PB.fromHandle h
         SH.estimateHashes (lns >-> sureNodeParser)
 
-{-
--- Read the scan from the given temp file, feeding it to the specified
--- consumer, returning the result.
-inputScan :: MonadIO m => FilePath -> (Consumer SureNode m a) -> m a
-inputScan name = do
-    withFile name ReadMode $ \h -> do
-        runEffect $ PB.fromHandle
--}
+-- |Update the hashes, for any nodes that don't have hashes.
+updateHashes :: Naming n => n -> HashProgress -> FilePath -> B.ByteString -> IO FilePath
+updateHashes naming hp path rootDir = do
+    withFile path ReadMode $ \h -> do
+        withTemp naming False $ \tname outH -> do
+            withPMeter $ \meter -> do
+                let lns = folds mappend B.empty id $ view PB.lines $ PB.fromHandle h
+                let inp = lns >-> sureNodeParser >-> addDirs rootDir
+                let outp = sureEncoder >-> pUnlines >-> PB.toHandle outH
+                runEffect $ inp >-> SH.computeHashes meter hp >-> outp
+                return tname
+                -- runEffect $ lns >-> sureNodeParser >-> addDirs rootDir >-> SH.computeHashes meter hp
 
 -- A simple unlines function
 pUnlines :: Monad m => Pipe B.ByteString B.ByteString m ()
