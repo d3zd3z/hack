@@ -3,88 +3,53 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Sure.Decode (
-    sureFileParser,
+    sureNodeParser,
     decodeLine
 ) where
 
 import Control.Applicative ((<|>))
+import Control.Monad (forever, unless)
 import qualified Data.Attoparsec.ByteString as PB
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import qualified Data.ByteString as B
 import Data.Char (isHexDigit)
 import qualified Data.Map.Strict as Map
 import Data.Word (Word8)
-import qualified Data.Vector as V
+import Pipes
 
 import Sure.Types
 
+-- * SureNode parser
+sureNodeParser :: Monad m => Pipe B.ByteString SureNode m ()
+sureNodeParser = do
+    h1 <- await
+    unless (h1 == "asure-2.0") $ error "Invalid header line"
+    h2 <- await
+    unless (h2 == "-----") $ error "Invalid header sep line"
+    forever $ do
+        line <- await
+        yield $ decodeLine line
+
 -- * SureTree parser
 
--- | Decode a list of nodes into a tree of nodes.  Throws an error if
--- it isn't valid.
-sureFileParser :: [Node] -> SureTree
-sureFileParser (Header1 : Header2 : rest) =
-    case dirsParser rest of
-        ([dir], []) -> dir
-        _           -> error "Unexpected iput"
-sureFileParser _ = error "Unexpected input"
-
--- | Parse a list of 0 or more full directories.  Consumes the final
--- separator, which can either be a "-" line, or the end of the input.
-dirsParser :: [Node] -> ([SureTree], [Node])
-dirsParser (Dir name atts : xs1) =
-    let (dirs, xs2) = dirsParser xs1 in
-    let (files, xs3) = filesParser xs2 in
-    let node = SureTree {
-        stName = name,
-        stAtts = atts,
-        stChildren = V.fromList dirs,
-        stFiles = V.fromList files } in
-    let (nodes, xs4) = dirsParser xs3 in
-    (node : nodes, xs4)
-dirsParser (Sep:xs) = ([], xs)
-dirsParser [] = ([], [])
-dirsParser _ = error "Unexpected input"
-
--- | Parse a list of 0 or more file nodes.  Consumes the final
--- separator.
-filesParser :: [Node] -> ([SureFile], [Node])
-filesParser (File name atts : xs1) =
-    let (files, xs2) = filesParser xs1 in
-    (SureFile name atts : files, xs2)
-filesParser (Up : xs) = ([], xs)
-filesParser _ = error "Unexpected input"
-
--- * Line tokenizer.
-data Node
-   = Header1
-   | Header2
-   | Dir B.ByteString AttMap
-   | Sep
-   | File B.ByteString AttMap
-   | Up
-   deriving Show
-
 -- Parse a line, considering errors to be 'error'
-decodeLine :: B.ByteString -> Node
+decodeLine :: B.ByteString -> SureNode
 decodeLine = either error id .  P.parseOnly lineParser
 
-lineParser :: P.Parser Node
+lineParser :: P.Parser SureNode
 lineParser =
-   (P.string "asure-2.0" *> return Header1 <|>
-   P.string "-----" *> return Header2 <|>
-   dirParser <|> fileParser <|>
-   P.string "-" *> return Sep <|>
-   P.string "u" *> return Up)
+   (dirParser <|> fileParser <|>
+   P.string "-" *> return SureSep <|>
+   P.string "u" *> return SureLeave)
    <* P.endOfInput
 
-dirParser :: P.Parser Node
-dirParser = nodeParser 'd' Dir
+dirParser :: P.Parser SureNode
+dirParser = nodeParser 'd' SureEnter
 
-fileParser :: P.Parser Node
-fileParser = nodeParser 'f' File
+fileParser :: P.Parser SureNode
+fileParser = nodeParser 'f' SureNode
 
-nodeParser :: Char -> (B.ByteString -> AttMap -> Node) -> P.Parser Node
+nodeParser :: Char -> (B.ByteString -> AttMap -> SureNode) -> P.Parser SureNode
 nodeParser ch gen = do
    _ <- P.char ch
    name <- nameParser

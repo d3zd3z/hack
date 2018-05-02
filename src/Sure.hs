@@ -6,18 +6,24 @@
 module Sure (
     basicNaming,
     simpleWalk,
+    estimateHashes,
 
     showOut
 ) where
 
+import Control.Lens (view)
 import Control.Monad.IO.Class
 import qualified Data.ByteString as B
 import Pipes
+import Pipes.Group (folds)
 import qualified Pipes.ByteString as PB
-import System.IO (Handle, hPutStrLn)
+import System.IO (Handle, hPutStrLn, withFile, IOMode(..))
 
 import Data.Weave.Naming
+import Sure.Decode (sureNodeParser)
 import Sure.Encode (sureEncoder)
+import qualified Sure.Hashes as SH
+import Sure.Hashes (HashProgress(..))
 import Sure.Walk (walk)
 
 basicNaming :: SimpleNaming
@@ -30,6 +36,23 @@ simpleWalk naming dirName = do
     withTemp naming False $ \tname h -> do
         runEffect $ walk dirName >-> sureEncoder >-> pUnlines >-> PB.toHandle h
         return $ tname
+
+-- Read a temp file containing a walk, and build an estimate of the
+-- number and size of hashes that need computation.
+estimateHashes :: FilePath -> IO HashProgress
+estimateHashes path = do
+    withFile path ReadMode $ \h -> do
+        let lns = folds mappend B.empty id $ view PB.lines $ PB.fromHandle h
+        SH.estimateHashes (lns >-> sureNodeParser)
+
+{-
+-- Read the scan from the given temp file, feeding it to the specified
+-- consumer, returning the result.
+inputScan :: MonadIO m => FilePath -> (Consumer SureNode m a) -> m a
+inputScan name = do
+    withFile name ReadMode $ \h -> do
+        runEffect $ PB.fromHandle
+-}
 
 -- A simple unlines function
 pUnlines :: Monad m => Pipe B.ByteString B.ByteString m ()

@@ -42,6 +42,8 @@ main = do
                putStrLn $ "Walking: " ++ dir
                tmp <- simpleWalk basicNaming $ B.pack dir
                putStrLn $ "Written to: " ++ show tmp
+               est <- estimateHashes tmp
+               putStrLn $ "Estimate: " ++ show est
             CmdLoad -> do
                putStrLn $ "Loading"
                undefined

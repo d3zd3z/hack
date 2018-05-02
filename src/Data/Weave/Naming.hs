@@ -1,5 +1,6 @@
 -- |Weave file naming conventions
 
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -69,6 +70,30 @@ openTemp naming comp = loop 1
 -- created temp file.
 withTemp :: Naming n => n -> Bool -> (FilePath -> Handle -> IO a) -> IO a
 withTemp naming comp = bracket (openTemp naming comp) (hClose . snd) . uncurry
+
+-- | 'withTempPipe' @naming comp action@ invokes action, passing it a
+-- 'Consumer' that will consume the lines of the files as strict
+-- bytestrings.  It is up to the resulting action to do something with
+-- this Consumer.
+{-
+withTempPipe
+    :: (Naming n, MonadIO m)
+    => n
+    -> Bool
+    -> (FilePath -> Consumer B.ByteString m a -> IO a)
+    -> m a
+-}
+{-
+withTempPipe naming comp action = do
+    withTemp naming comp $ \tname h ->
+        -- return $ action tname ~> pUnlines ~> PB.toHandle h
+        return $ pUnlines >~ PB.toHandle h
+
+pUnlines :: Monad m => Consumer B.ByteString m ()
+pUnlines = do
+    await >>= yield
+    yield "\n"
+-}
 
 -- A test naming
 {-
