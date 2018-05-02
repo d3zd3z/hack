@@ -22,7 +22,7 @@ import Text.Human
 import Text.Progress
 import Text.Printf (printf)
 
--- import Sure.Walk (walk)
+import Sure.Walk (safely)
 import Sure.Types
 
 -- |Fold down a Producer representing a tree, and update a state with
@@ -61,7 +61,7 @@ computeHashes meter total = do
             (name, node) <- await
             if needsHash node then do
                 hash <- liftIO $ hashFile name
-                maybe (return ()) (yield . updateAtt node "sha1") hash
+                yield $ maybe node (updateAtt node "sha1") hash
                 let hp' = updateProgress node hp
                 liftIO $ showStatus meter hp' total
                 loop hp'
@@ -80,16 +80,6 @@ showStatus meter hp total = do
         (humanizeBytes $ hpBytes total)
         ((fromIntegral $ hpBytes hp :: Double) /
          (fromIntegral $ hpBytes total) * 100.0)
-{-
-for gen $ \(name, node) -> do
-    when (needsHash node) $ do
-        liftIO $ putStrLn $ show name
-        hash <- liftIO $ hashFile name
-        case hash of
-            Just h -> do
-                liftIO $ putStrLn $ "  " ++ show h
-            Nothing -> return ()
--}
 
 -- | Compute the hash of a given file, returning it if possible.
 -- To preserve compatibility with the rest of this system, use the
@@ -101,16 +91,16 @@ for gen $ \(name, node) -> do
 -- provide a way of disabling the atime change upon read.  This
 -- doesn't appear to be visible in the 'unix' package, so would have
 -- to be bound manually.
---
--- This doesn't handle errors, and it is challenging here to make sure
--- that errors don't result in a handle leak.
 hashFile :: B.ByteString -> IO (Maybe B.ByteString)
-hashFile name = do
+hashFile = safely . hashFile'
+
+hashFile' :: B.ByteString -> IO B.ByteString
+hashFile' name = do
     fd <- U.openFd name U.ReadOnly Nothing U.defaultFileFlags
     h <- U.fdToHandle fd
     payload <- L.hGetContents h
     let hash = H.hashlazy payload :: H.Digest H.SHA1
-    return $ Just $ hexifyB hash
+    return $ hexifyB hash
 
 -- A builder that converts a ByteArray unto its hex representation.
 hexifyB :: DBA.ByteArrayAccess b => b -> B.ByteString

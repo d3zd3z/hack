@@ -5,7 +5,9 @@
 
 module Sure.Walk (
    SureNode(..),
-   walk
+   walk,
+
+   safely
 ) where
 
 import Sure.Atts (AttMap, getAtts, isDir)
