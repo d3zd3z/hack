@@ -1,14 +1,18 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Hack.Weave.Header (
    Header(..),
    DeltaInfo(..),
+
+   addDelta,
+   highestDelta,
 ) where
 
 import Data.Aeson.TH
 import Data.Map (Map)
 import Data.Text (Text)
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (getCurrentTime, UTCTime)
 
 data Header = Header {
    version :: !Int,
@@ -32,3 +36,21 @@ data DeltaInfo = DeltaInfo {
 
 deriveJSON defaultOptions ''Header
 deriveJSON defaultOptions ''DeltaInfo
+
+-- |Add a new delta to the given header.
+addDelta :: Text -> Map Text Text -> Header -> IO Header
+addDelta name tags hdr = do
+   now <- getCurrentTime
+   let dlt = deltas hdr
+   let newDelta = DeltaInfo {
+      name = name,
+      number = highestDelta hdr + 1,
+      tags = tags,
+      time = now }
+   return $ hdr { deltas = newDelta : dlt }
+
+-- Given some deltas, returns the highest delta number, or zero if
+-- there are none.
+highestDelta :: Header -> Int
+highestDelta Header{ deltas = [] } = 0
+highestDelta Header{deltas} = maximum $ map number deltas

@@ -23,18 +23,24 @@
 module Hack.Weave.Parse (
    readWeaveFile,
    readZWeaveFile,
+   readHeader,
+   readDelta,
    weaveParse,
-   weaveDecode
+   weaveDecode,
+   withWeaveStream
 ) where
 
+import Control.Exception (throwIO)
 import Data.Aeson (decode)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
+import Data.Maybe (mapMaybe)
 import Data.IORef
 import Hack.Weave.Types (WeaveElement(..))
+import Hack.Weave.Header (Header)
 import System.IO.Streams (InputStream)
 import qualified System.IO.Streams as Streams
 import Text.Read (readMaybe)
@@ -49,6 +55,31 @@ readWeaveFile :: FilePath -> Int -> IO [WeaveElement]
 readWeaveFile path delta = do
    Streams.withFileAsInput path $ \inp -> do
       weaveDecode inp >>= weaveParse delta >>= Streams.toList
+
+withWeaveStream :: FilePath -> Int -> (InputStream WeaveElement -> IO a) -> IO a
+withWeaveStream path delta action = do
+   Streams.withFileAsInput path $ \input -> do
+      weaveDecode input >>= weaveParse delta >>= action
+
+-- |Read the header from the file.
+readHeader :: FilePath -> IO Header
+readHeader path = do
+   Streams.withFileAsInput path $ \inp -> do
+      elts <- weaveDecode inp
+      elt <- Streams.read elts
+      case elt of
+         (Just (WeaveHeader hdr)) -> return hdr
+         _ -> throwIO $ userError $ "Header not found in weave file: " ++ show path
+
+-- |Load the entire contents of a given delta.
+readDelta :: FilePath -> Int -> IO [B.ByteString]
+readDelta path delta = do
+   Streams.withFileAsInput path $ \inp -> do
+      items <- weaveDecode inp >>= weaveParse delta >>= Streams.toList
+      return $ mapMaybe onlyPlain items
+   where
+      onlyPlain (WeavePlain text (Just _)) = Just text
+      onlyPlain _                          = Nothing
 
 -- |By tracking the insert/delete/end state, augment any "plain" lines
 -- adding a line number, and a flag indicating if it should be kept by
