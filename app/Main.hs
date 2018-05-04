@@ -46,6 +46,12 @@ main = do
                putStrLn $ "Estimate: " ++ show est
                tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
                putStrLn $ "Written to: " ++ show tmp2
+            CmdOWalk dir ofile -> do
+               putStrLn $ "Walking: " ++ dir
+               tmp <- oldWalk basicNaming (B.pack dir) ofile
+               putStrLn $ "Written to: " ++ show tmp
+               est <- estimateHashes tmp
+               putStrLn $ "Estimate: " ++ show est
             CmdLoad -> do
                putStrLn $ "Loading"
                undefined
@@ -88,6 +94,7 @@ data Commands =
    CmdSnap Bool
    | CmdWeave
    | CmdWalk String
+   | CmdOWalk String String
    | CmdLoad
    deriving Show
 
@@ -106,6 +113,7 @@ subcmd = subparser (
    command "snap" (info (snapopts <**> helper) idm)
    <> command "weave" (info (weaveopts <**> helper) idm)
    <> command "walk" (info (walkopts <**> helper) idm)
+   <> command "owalk" (info (owalkopts <**> helper) idm)
    <> command "load" (info (loadopts <**> helper) idm))
 
 globalopt :: Parser GlobalFlags
@@ -128,6 +136,11 @@ weaveopts = pure CmdWeave
 
 walkopts :: Parser Commands
 walkopts = CmdWalk <$> argument str (metavar "DIR")
+
+owalkopts :: Parser Commands
+owalkopts = CmdOWalk <$>
+    argument str (metavar "DIR") <*>
+    argument str (metavar "OFILE")
 
 loadopts :: Parser Commands
 loadopts = pure CmdLoad

@@ -6,7 +6,8 @@
 module Sure.Hashes (
     HashProgress(..),
     estimateHashes,
-    computeHashes
+    computeHashes,
+    combineHashes
 ) where
 
 import qualified Crypto.Hash as H
@@ -45,6 +46,32 @@ data HashProgress = HashProgress {
 instance Monoid HashProgress where
     mempty = HashProgress 0 0
     mappend (HashProgress a1 b1) (HashProgress a2 b2) = HashProgress (a1 + a2) (b1 + b2)
+
+-- * Hash combining
+
+-- |Walk through two streams together, yielding the 'srcNew' values,
+-- but checking for items in the 'old' stream with hashes that might
+-- still be valid.
+combineHashes
+    :: Monad m
+    => Producer SureNode m ()
+    -> Producer SureNode m ()
+    -> Producer SureNode m ()
+combineHashes _srcOld srcNew = do
+    -- To start, just ignore the old.
+    hd <- lift $ next srcNew
+    loop hd
+    where
+        -- loop :: Monad mm => Either () (SureNode, Producer SureNode mm ()) -> Producer SureNode mm ()
+        loop
+            :: Monad mm
+            => Either () (SureNode, Producer SureNode mm ())
+            -> Producer SureNode mm ()
+        loop (Left r) = return r
+        loop (Right (node, src2)) = do
+            yield node
+            hd <- lift $ next src2
+            loop hd
 
 -- * Hash updating
 --

@@ -11,7 +11,9 @@ module Data.Weave.Naming (
    withTemp
 ) where
 
-import Control.Exception (bracket, throwIO, try)
+import Control.Exception (throwIO, try)
+import Control.Monad.IO.Class
+import Control.Monad.Catch (bracket, MonadMask)
 import System.IO (Handle, hClose)
 import System.IO.Error (IOError)
 import System.IO.SafeIO (openExclusiveWrite)
@@ -68,8 +70,8 @@ openTemp naming comp = loop 1
 
 -- | 'withTemp' @naming comp action@ invokes action with a newly
 -- created temp file.
-withTemp :: Naming n => n -> Bool -> (FilePath -> Handle -> IO a) -> IO a
-withTemp naming comp = bracket (openTemp naming comp) (hClose . snd) . uncurry
+withTemp :: (Naming n, MonadMask m, MonadIO m) => n -> Bool -> (FilePath -> Handle -> m a) -> m a
+withTemp naming comp = bracket (liftIO $ openTemp naming comp) (liftIO . hClose . snd) . uncurry
 
 -- | 'withTempPipe' @naming comp action@ invokes action, passing it a
 -- 'Consumer' that will consume the lines of the files as strict

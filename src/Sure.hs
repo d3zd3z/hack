@@ -6,21 +6,19 @@
 module Sure (
     basicNaming,
     simpleWalk,
+    oldWalk,
     estimateHashes,
     updateHashes,
 
     showOut
 ) where
 
-import Control.Lens (view)
 import Control.Monad.IO.Class
 import qualified Data.ByteString as B
 import Pipes
-import Pipes.Group (folds)
-import qualified Pipes.ByteString as PB
-import System.IO (Handle, hPutStrLn, withFile, IOMode(..))
+import System.IO (Handle, hPutStrLn)
 
-import Data.Weave.Naming
+import Data.Weave
 import Sure.Decode (sureNodeParser)
 import Sure.Encode (sureEncoder)
 import qualified Sure.Hashes as SH
@@ -36,36 +34,38 @@ basicNaming = SimpleNaming "./2sure" "dat" True
 -- file, and return the name of the temp file.
 simpleWalk :: Naming n => n -> B.ByteString -> IO FilePath
 simpleWalk naming dirName = do
-    withTemp naming False $ \tname h -> do
-        runEffect $ walk dirName >-> sureEncoder >-> pUnlines >-> PB.toHandle h
-        return $ tname
+    toTempFile naming $ \sink tname -> do
+        runEffect $ walk dirName >-> sureEncoder >-> sink
+        return tname
+
+-- Walk a filesystem at 'dirName', while also looking at 'oldFile' to
+-- reuse any hashes we might be able to get from there.
+oldWalk :: Naming n => n -> B.ByteString -> FilePath -> IO FilePath
+oldWalk naming dirName oldName = do
+    toTempFile naming $ \sink tname -> do
+        fromTempFile oldName $ \srcOld -> do
+            let srcNew = walk dirName
+            let out = sureEncoder >-> sink
+            runEffect $ SH.combineHashes (srcOld >-> sureNodeParser) srcNew >-> out
+            return tname
 
 -- Read a temp file containing a walk, and build an estimate of the
 -- number and size of hashes that need computation.
 estimateHashes :: FilePath -> IO HashProgress
 estimateHashes path = do
-    withFile path ReadMode $ \h -> do
-        let lns = folds mappend B.empty id $ view PB.lines $ PB.fromHandle h
-        SH.estimateHashes (lns >-> sureNodeParser)
+    fromTempFile path $ \src -> do
+        SH.estimateHashes (src >-> sureNodeParser)
 
 -- |Update the hashes, for any nodes that don't have hashes.
 updateHashes :: Naming n => n -> HashProgress -> FilePath -> B.ByteString -> IO FilePath
 updateHashes naming hp path rootDir = do
-    withFile path ReadMode $ \h -> do
-        withTemp naming False $ \tname outH -> do
+    fromTempFile path $ \src -> do
+        toTempFile naming $ \sink tname -> do
             withPMeter $ \meter -> do
-                let lns = folds mappend B.empty id $ view PB.lines $ PB.fromHandle h
-                let inp = lns >-> sureNodeParser >-> addDirs rootDir
-                let outp = sureEncoder >-> pUnlines >-> PB.toHandle outH
+                let inp = src >-> sureNodeParser >-> addDirs rootDir
+                let outp = sureEncoder >-> sink
                 runEffect $ inp >-> SH.computeHashes meter hp >-> outp
                 return tname
-                -- runEffect $ lns >-> sureNodeParser >-> addDirs rootDir >-> SH.computeHashes meter hp
-
--- A simple unlines function
-pUnlines :: Monad m => Pipe B.ByteString B.ByteString m ()
-pUnlines = for cat $ \line -> do
-    yield line
-    yield "\n"
 
 -- A dev function that 'shows' things to a temp file.
 -- TODO: Enhance "Sure.Encode" to support this.
