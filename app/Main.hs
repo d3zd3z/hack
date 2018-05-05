@@ -54,16 +54,9 @@ main = do
                putStrLn $ "Estimate: " ++ show est
                tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
                putStrLn $ "Written to: " ++ show tmp2
-            CmdLoad -> do
-               putStrLn $ "Loading"
-               undefined
-               {-
-               lns <- withBinaryFile "sample.dat" ReadMode $ \h ->
-                  whileM (not <$> hIsEOF h) $ B.hGetLine h
-               let tree = sureFileParser $ map decodeLine lns
-               putStrLn $ "Counting: " ++ show (stName tree)
-               putStrLn $ show (countNodes tree) ++ " nodes"
-               -}
+            CmdSignoff ofile nfile -> do
+               putStrLn $ "Signoff"
+               simpleSignoff ofile nfile
 
 runSnap :: Bool -> [Volume] -> IO ()
 runSnap pretend volumes = do
@@ -97,7 +90,7 @@ data Commands =
    | CmdWeave
    | CmdWalk String
    | CmdOWalk String String
-   | CmdLoad
+   | CmdSignoff String String
    deriving Show
 
 mainopts :: ParserInfo AllFlags
@@ -116,7 +109,7 @@ subcmd = subparser (
    <> command "weave" (info (weaveopts <**> helper) idm)
    <> command "walk" (info (walkopts <**> helper) idm)
    <> command "owalk" (info (owalkopts <**> helper) idm)
-   <> command "load" (info (loadopts <**> helper) idm))
+   <> command "signoff" (info (signoffopts <**> helper) idm))
 
 globalopt :: Parser GlobalFlags
 globalopt =
@@ -144,5 +137,7 @@ owalkopts = CmdOWalk <$>
     argument str (metavar "DIR") <*>
     argument str (metavar "OFILE")
 
-loadopts :: Parser Commands
-loadopts = pure CmdLoad
+signoffopts :: Parser Commands
+signoffopts = CmdSignoff <$>
+    argument str (metavar "OLD") <*>
+    argument str (metavar "NEW")

@@ -9,10 +9,12 @@ module Sure (
     oldWalk,
     estimateHashes,
     updateHashes,
+    simpleSignoff,
 ) where
 
 import Conduit
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C8
 
 import Data.Weave
 import Sure.Decode (sureNodeParser)
@@ -21,6 +23,7 @@ import qualified Sure.Hashes as SH
 import Sure.Compare
 import Sure.Hashes (HashProgress(..))
 import Sure.Types (addDirs)
+import Sure.Signoff
 import Sure.Walk (walk)
 import Text.Progress (withPMeter)
 
@@ -78,3 +81,11 @@ updateHashes naming hp path rootDir = do
                 runEffect $ inp >-> SH.computeHashes meter hp >-> outp
                 return tname
 -}
+
+simpleSignoff :: FilePath -> FilePath -> IO ()
+simpleSignoff oldPath newPath = do
+    runConduitRes $ do
+        let srcOld = fromTempFile oldPath .| sureNodeParser
+        let srcNew = fromTempFile newPath .| sureNodeParser
+        combineTrees srcOld srcNew .| signoff .|
+            mapC (C8.pack . prettyNode) .| unlinesAsciiC .| stdoutC
