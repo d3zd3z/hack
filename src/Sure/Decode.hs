@@ -7,34 +7,41 @@ module Sure.Decode (
     decodeLine
 ) where
 
+import Conduit
 import Control.Applicative ((<|>))
-import Control.Monad (forever, unless)
+import Control.Monad (unless)
 import qualified Data.Attoparsec.ByteString as PB
+import Data.Attoparsec.ByteString ((<?>))
 import qualified Data.Attoparsec.ByteString.Char8 as P
 import qualified Data.ByteString as B
 import Data.Char (isHexDigit)
 import qualified Data.Map.Strict as Map
 import Data.Word (Word8)
-import Pipes
 
 import Sure.Types
 
 -- * SureNode parser
-sureNodeParser :: Monad m => Pipe B.ByteString SureNode m ()
+-- | Transform a conduit of lines
+sureNodeParser :: Monad m => ConduitT B.ByteString SureNode m ()
 sureNodeParser = do
     h1 <- await
-    unless (h1 == "asure-2.0") $ error "Invalid header line"
+    unless (h1 == Just "asure-2.0") $ error "Invalid header line"
     h2 <- await
-    unless (h2 == "-----") $ error "Invalid header sep line"
-    forever $ do
-        line <- await
-        yield $ decodeLine line
+    unless (h2 == Just "-----") $ error "Invalid header sep line"
+    let loop = do
+            line <- await
+            case line of
+                Nothing -> return ()
+                Just l -> do
+                    yield $ decodeLine l
+                    loop
+    loop
 
 -- * SureTree parser
 
 -- Parse a line, considering errors to be 'error'
 decodeLine :: B.ByteString -> SureNode
-decodeLine = either error id .  P.parseOnly lineParser
+decodeLine line = either (\text -> error $ text ++ ": " ++ show line) id $  P.parseOnly lineParser line
 
 lineParser :: P.Parser SureNode
 lineParser =
@@ -52,9 +59,9 @@ fileParser = nodeParser 'f' SureNode
 nodeParser :: Char -> (B.ByteString -> AttMap -> SureNode) -> P.Parser SureNode
 nodeParser ch gen = do
    _ <- P.char ch
-   name <- nameParser
+   name <- nameParser <?> "NodeName"
    _ <- P.char '['
-   atts <- P.many' attParser
+   atts <- P.many' attParser <?> "atts"
    _ <- P.char ']'
    return $ gen name $ Map.fromList atts
 
@@ -74,8 +81,11 @@ escapedChar =
 
 attParser :: P.Parser (B.ByteString, B.ByteString)
 attParser = do
-   key <- P.takeWhile1 P.isAlpha_ascii
+   key <- P.takeWhile1 isAlphaNum
    _ <- P.space
    value <- (P.many' escapedChar) >>= return . B.pack
    _ <- P.space
    return $ (key, value)
+
+isAlphaNum :: Char -> Bool
+isAlphaNum ch = P.isAlpha_ascii ch || P.isDigit ch

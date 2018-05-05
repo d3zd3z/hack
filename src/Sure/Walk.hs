@@ -12,6 +12,7 @@ module Sure.Walk (
 
 import Sure.Atts (AttMap, getAtts, isDir)
 
+import Conduit
 import Control.Exception (bracket, throwIO, tryJust)
 import Control.Monad (guard, forM, unless)
 import Control.Monad.State.Strict
@@ -19,7 +20,6 @@ import qualified Data.ByteString.Char8 as B
 import Data.List (partition, sortOn)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
-import Pipes
 import System.IO.Error (isUserError)
 import qualified System.Posix.ByteString as P
 
@@ -34,11 +34,11 @@ data Meter = Meter {
    mFiles :: !Integer,
    mBytes :: !Integer }
 
-type MeterIO = StateT Meter (Producer SureNode IO)
+type MeterIO = StateT Meter (ConduitT () SureNode IO)
 
 -- |A stream that walks a filesystem, yielding all of the in an
 -- in-order depth-first traversal of the tree.
-walk :: P.RawFilePath -> Producer SureNode IO ()
+walk :: P.RawFilePath -> ConduitT () SureNode IO ()
 walk path = do
     withPMeter $ \pm -> do
         let meter = Meter {
@@ -65,7 +65,7 @@ walkDir path name atts = do
     lift $ yield $ SureEnter name atts
     subWalk path dirs
     lift $ yield SureSep
-    lift $ each $ map (uncurry SureNode) nondirs
+    lift $ yieldMany $ map (uncurry SureNode) nondirs
     lift $ yield SureLeave
 
 subWalk :: P.RawFilePath -> [(P.RawFilePath, AttMap)] -> MeterIO ()

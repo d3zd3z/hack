@@ -10,26 +10,27 @@ module Sure.Hashes (
     combineHashes
 ) where
 
+import Conduit
 import qualified Crypto.Hash as H
 import qualified Data.ByteArray as DBA
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as L
+import qualified Data.Map.Strict as Map
 import Data.Monoid ((<>))
-import Pipes
-import qualified Pipes.Prelude as PP
 import qualified System.Posix.ByteString as U
 import Text.Human
 import Text.Progress
 import Text.Printf (printf)
 
+import Sure.Compare
 import Sure.Walk (safely)
 import Sure.Types
 
 -- |Fold down a Producer representing a tree, and update a state with
 -- the values that need updating.
-estimateHashes :: Monad m => Producer SureNode m () -> m HashProgress
-estimateHashes = PP.fold (flip updateProgress) mempty id
+estimateHashes :: Monad m => ConduitT SureNode o m HashProgress
+estimateHashes = foldlC (flip updateProgress) mempty
 
 updateProgress :: SureNode -> HashProgress -> HashProgress
 updateProgress node hp =
@@ -52,65 +53,49 @@ instance Monoid HashProgress where
 -- |Walk through two streams together, yielding the 'srcNew' values,
 -- but checking for items in the 'old' stream with hashes that might
 -- still be valid.
-combineHashes
-    :: Monad m
-    => Producer SureNode m ()
-    -> Producer SureNode m ()
-    -> Producer SureNode m ()
-combineHashes _srcOld srcNew = do
-    -- old <- lift $ next srcOld
-    new <- lift $ next srcNew
-    -- unless (sameDir old new) $ lift $ throwIO $ userException "directory mismatch"
-    loop new
-    where
-        -- Process the top level directory.  old and new should be the
-        -- first nodes within each directory.  May call itself
-        -- recursively to process subdirectories, and will talk-call
-        -- to handle the file processing nodes at the end.
-        loop
-            :: Monad mm
-            => Either () (SureNode, Producer SureNode mm ())
-            -> Producer SureNode mm ()
-        loop (Left r) = return r
-        loop (Right (node, src2)) = do
-            yield node
-            hd <- lift $ next src2
-            loop hd
-
-        {-
-        -- Most of the time, end of input is an error, so to simplify,
-        -- raise an exception if we get to the end when unexpected
-        mustNext :: MonadIO m => Producer SureNode m () -> Producer SureNode m SureNode
-        mustNext src = do
-            node <- lift $ next src
-            either
-                (\r -> lift $ throwIO $ userException $ "Unexpected exception" ++ show r)
-                id
-                node
-        -}
+combineHashes :: MonadIO m => ConduitT (ComboNode SureNode) SureNode m ()
+combineHashes =
+    -- First version, just pass new through.
+    awaitForever $ \nd -> do
+        case nd of
+            Both (SureNode _ att1) nn@(SureNode name2 att2) ->
+                if all (\att -> Map.lookup att att1 == Map.lookup att att2)
+                    ["mtime", "ctime", "ino", "size"] &&
+                   Map.member "sha1" att1
+                then
+                    yield $ SureNode name2
+                        (Map.insert "sha1" (att1 Map.! "sha1") att2)
+                else
+                    yield nn
+            Both __ bb -> yield bb
+            Second nn -> yield nn
+            First _ -> return ()
 
 -- * Hash updating
 --
 -- | Compute the hashes for the given stream.
 computeHashes
-    :: MonadIO m 
+    :: MonadIO m
     => PMeter
     -> HashProgress
-    -> Pipe (B.ByteString, SureNode) SureNode m ()
+    -> ConduitT (B.ByteString, SureNode) SureNode m ()
 computeHashes meter total = do
     let
-        loop :: MonadIO mm => HashProgress -> Pipe (B.ByteString, SureNode) SureNode mm ()
+        loop :: MonadIO mm => HashProgress -> ConduitT (B.ByteString, SureNode) SureNode mm ()
         loop hp = do
-            (name, node) <- await
-            if needsHash node then do
-                hash <- liftIO $ hashFile name
-                yield $ maybe node (updateAtt node "sha1") hash
-                let hp' = updateProgress node hp
-                liftIO $ showStatus meter hp' total
-                loop hp'
-            else do
-                yield node
-                loop hp
+            mnode <- await
+            case mnode of
+                Nothing -> return ()
+                Just (name, node) -> do
+                    if needsHash node then do
+                        hash <- liftIO $ hashFile name
+                        yield $ maybe node (updateAtt node "sha1") hash
+                        let hp' = updateProgress node hp
+                        liftIO $ showStatus meter hp' total
+                        loop hp'
+                    else do
+                        yield node
+                        loop hp
     loop mempty
 
 showStatus :: PMeter -> HashProgress -> HashProgress -> IO ()

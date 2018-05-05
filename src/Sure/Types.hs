@@ -16,6 +16,7 @@ module Sure.Types (
    nodeSize
 ) where
 
+import Conduit
 import Control.Exception (throwIO)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
@@ -23,7 +24,6 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Monoid ((<>))
 import Data.Vector (Vector)
-import Pipes
 
 -- |An attribute maintains a k/v mapping for the filesystem mappings.
 -- Everything is treated as ascii strings, with a special escaping
@@ -73,35 +73,37 @@ nodeSize _                 = 0
 -- |This pipe adds a directory tracker to the input stream.  The
 -- __root__ is replaced with the rootDir argument, but otherwise, the
 -- names are from the nodes.
-addDirs :: MonadIO m => B.ByteString -> Pipe SureNode (B.ByteString, SureNode) m ()
+addDirs :: MonadIO m => B.ByteString -> ConduitT SureNode (B.ByteString, SureNode) m ()
 addDirs rootDir = do
     node <- await
     case node of
-        (SureEnter name _)
+        Just nn@(SureEnter name _)
             | name == "__root__" -> do
-                yield $ (rootDir, node)
+                yield $ (rootDir, nn)
                 addDirs' rootDir
             | otherwise          -> do
                 liftIO $ throwIO $ userError $ "Root directory not __root__: " ++ show name
+        Nothing -> return ()
         _ -> liftIO $ throwIO $ userError $ "Node tree does not start with \"Enter\" node"
 
 -- Helper, walks a directory, after seeing the SureEnter (and yielding
 -- it).  Will return after seeing and yielding the SureLeave.
-addDirs' :: Monad m => B.ByteString -> Pipe SureNode (B.ByteString, SureNode) m ()
+addDirs' :: Monad m => B.ByteString -> ConduitT SureNode (B.ByteString, SureNode) m ()
 addDirs' dir = do
     node <- await
     case node of
-        (SureEnter name _) -> do
+        Just nn@(SureEnter name _) -> do
             let subName = dir <> "/" <> name
-            yield (subName, node)
+            yield (subName, nn)
             addDirs' subName  -- Nested recursion.
             addDirs' dir      -- Tail call to continue.
-        SureLeave -> yield (dir, node)
-        SureSep -> yield (dir, node) >> addDirs' dir
-        (SureNode name _) -> do
+        Just SureLeave -> yield (dir, SureLeave)
+        Just SureSep -> yield (dir, SureSep) >> addDirs' dir
+        Just nn@(SureNode name _) -> do
             let subName = dir <> "/" <> name
-            yield (subName, node)
+            yield (subName, nn)
             addDirs' dir
+        Nothing -> return ()
 
 -- Attempt to update the `key` attribute to the given value.
 updateAtt :: SureNode -> B.ByteString -> B.ByteString -> SureNode

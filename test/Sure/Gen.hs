@@ -7,27 +7,34 @@ module Sure.Gen (
     t1
 ) where
 
+import Conduit
 import Control.Monad (forM_, replicateM)
 import qualified Data.ByteString.Char8 as B
 import Data.List (sort)
 import qualified Data.Map.Strict as Map
 import Data.Random
-import Pipes
-import qualified Pipes.Prelude as PP
+-- import Pipes
+-- import qualified Pipes.Prelude as PP
 
 import Sure.Types
 
--- A test function
-t1 :: IO ()
-t1 = runRVarT (runEffect $ genTree 5 5 4 >-> PP.print) StdRandom
-
 type RVarIO = RVarT IO
 
+t1 :: IO ()
+t1 = runConduit $ genTree 5 5 4 .| printC
+
+-- Note that the rvar is run multiple times.  If the random generation
+-- is slow, then this is probably not a good way to do this.  It is
+-- likely adequate for testing, though.
+
 -- |Produce a sure tree, with roughly 'files' files in each directory,
--- about 'dirs' subdirs, and a depth of about 'depth'
-genTree :: Int -> Int -> Int -> Producer SureNode RVarIO ()
-genTree ofiles odirs odepth = genTree' "__root__" ofiles odirs odepth 0
+-- about 'dirs' subdirs, and a depth of about 'depth'.
+genTree :: Int -> Int -> Int -> ConduitT () SureNode IO ()
+genTree ofiles odirs odepth =
+    transPipe (\m -> runRVarT m StdRandom) pipe
     where
+    pipe :: ConduitT () SureNode RVarIO ()
+    pipe = genTree' "__root__" ofiles odirs odepth 0
     genTree' name files dirs depth curDep
         | curDep >= depth = return ()
         | otherwise = do
@@ -44,7 +51,7 @@ genTree ofiles odirs odepth = genTree' "__root__" ofiles odirs odepth 0
             mapM_ makeFile fileNames
             yield $ SureLeave
 
-makeFile :: B.ByteString -> Producer SureNode RVarIO ()
+makeFile :: B.ByteString -> ConduitT () SureNode RVarIO ()
 makeFile name = do
     myAtts <- lift $ randAtts "file"
     yield $ SureNode name myAtts

@@ -8,6 +8,7 @@ module Sure.Encode (
    sureEncoder
 ) where
 
+import Conduit
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Char8 as C8
@@ -16,7 +17,6 @@ import Data.Char (ord)
 import qualified Data.Map.Strict as Map
 import Data.Monoid ((<>))
 import qualified Data.Vector as V
-import Pipes
 
 import Sure.Types
 
@@ -39,11 +39,11 @@ oneNode key name atts = L.toStrict $ B.toLazyByteString encode
       encode = B.char7 key <> escape name <> B.char7 ' ' <>
          encodeAtts atts
 
-sureEncoder :: Monad m => Pipe SureNode B.ByteString m ()
+sureEncoder :: Monad m => ConduitT SureNode B.ByteString m ()
 sureEncoder = do
     yield "asure-2.0"
     yield "-----"
-    for cat $ yield . L.toStrict . B.toLazyByteString . encodeSureNode
+    awaitForever $ yield . L.toStrict . B.toLazyByteString . encodeSureNode
 
 encodeSureNode :: SureNode -> B.Builder
 encodeSureNode (SureEnter name atts) = encodeNode 'd' name atts
