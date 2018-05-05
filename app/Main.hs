@@ -18,6 +18,7 @@ import System.Process.Typed (proc, runProcess_)
 
 import Hack.Zfs
 import Sure
+import Data.Weave
 
 main :: IO ()
 main = do
@@ -57,6 +58,9 @@ main = do
             CmdSignoff ofile nfile -> do
                putStrLn $ "Signoff"
                simpleSignoff ofile nfile
+            CmdLoad -> do
+                hdr <- getWeaveInfo basicNaming
+                putStrLn $ "Header: " ++ show hdr
 
 runSnap :: Bool -> [Volume] -> IO ()
 runSnap pretend volumes = do
@@ -91,6 +95,7 @@ data Commands =
    | CmdWalk String
    | CmdOWalk String String
    | CmdSignoff String String
+   | CmdLoad
    deriving Show
 
 mainopts :: ParserInfo AllFlags
@@ -109,7 +114,8 @@ subcmd = subparser (
    <> command "weave" (info (weaveopts <**> helper) idm)
    <> command "walk" (info (walkopts <**> helper) idm)
    <> command "owalk" (info (owalkopts <**> helper) idm)
-   <> command "signoff" (info (signoffopts <**> helper) idm))
+   <> command "signoff" (info (signoffopts <**> helper) idm)
+   <> command "load" (info (loadopts <**> helper) idm))
 
 globalopt :: Parser GlobalFlags
 globalopt =
@@ -141,3 +147,6 @@ signoffopts :: Parser Commands
 signoffopts = CmdSignoff <$>
     argument str (metavar "OLD") <*>
     argument str (metavar "NEW")
+
+loadopts :: Parser Commands
+loadopts = pure CmdLoad

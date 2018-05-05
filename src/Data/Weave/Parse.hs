@@ -26,6 +26,7 @@
 
 module Data.Weave.Parse (
     readDelta,
+    readHeader,
     onlyPlain,
 ) where
 
@@ -38,6 +39,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Text.Read (readMaybe)
 
+import Data.Weave.Header
 import Data.Weave.Types
 
 readDelta :: Monad m => Int -> ConduitT B.ByteString WeaveElement m ()
@@ -54,6 +56,14 @@ onlyPlain = awaitForever $ \elt -> do
     case elt of
         (WeavePlain text (Just _)) -> yield text
         _                          -> return ()
+
+-- |Extract the header read in.
+readHeader :: Monad m => ConduitT B.ByteString Void m Header
+readHeader = do
+    line <- decodePipe .| await
+    case line of
+        Just (WeaveHeader hd) -> return hd
+        _ -> error $ "Corrupted weave header: " ++ show line
 
 -- |By tracking the insert/delete/end state, augment any "plain"
 -- lines, adding a line number, and a flag indicating if it should be

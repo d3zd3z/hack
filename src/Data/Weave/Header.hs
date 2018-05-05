@@ -7,7 +7,8 @@ module Data.Weave.Header (
 
    addDelta,
    highestDelta,
-   firstHeader
+   firstHeader,
+   blankHeader,
 ) where
 
 import Data.Aeson.TH
@@ -61,6 +62,11 @@ firstHeader name tags = do
             number = 1,
             tags = tags,
             time = now }] }
+
+blankHeader :: Header
+blankHeader = Header {
+    version = 1,
+    deltas = [] }
 
 -- Given some deltas, returns the highest delta number, or zero if
 -- there are none.

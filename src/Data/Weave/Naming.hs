@@ -8,13 +8,16 @@ module Data.Weave.Naming (
    Naming(..),
    SimpleNaming(..),
    openTemp,
-   withTemp
+   withTemp,
+   openPrimary
 ) where
 
+import Conduit
 import Control.Exception (throwIO, try)
-import Control.Monad.IO.Class
 import Control.Monad.Catch (bracket, MonadMask)
-import System.IO (Handle, hClose)
+import qualified Data.ByteString as B
+import Data.Conduit.Zlib (ungzip)
+import System.IO (Handle, hClose, IOMode(..), openFile)
 import System.IO.Error (IOError)
 import System.IO.SafeIO (openExclusiveWrite)
 
@@ -67,6 +70,18 @@ openTemp naming comp = loop 1
             either (\(_ :: IOError) -> loop (n + 1))
                (\fd -> return (name, fd))
                efd
+
+-- |Construct a source of lines from the primary file.
+openPrimary
+    :: (Naming n, MonadResource m, PrimMonad m, MonadThrow m)
+    => n
+    -> ConduitT () B.ByteString m ()
+openPrimary n = do
+    let src = sourceIOHandle $ openFile
+            (genName n (preferredExtension n) (isNameCompressed n))
+            ReadMode
+    let unc = if (isNameCompressed n) then src .| ungzip else src
+    unc .| linesUnboundedAsciiC
 
 -- | 'withTemp' @naming comp action@ invokes action with a newly
 -- created temp file.

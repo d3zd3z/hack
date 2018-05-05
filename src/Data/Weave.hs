@@ -9,15 +9,27 @@ module Data.Weave (
     toTempFile,
     fromTempFile,
     readDelta,
+
+    getWeaveInfo,
 ) where
 
 import Conduit
+import Control.Exception (tryJust)
+import Control.Monad (guard)
 import qualified Data.ByteString as B
 import System.IO (hClose)
+import System.IO.Error (isDoesNotExistError)
 
+import Data.Weave.Header
 import Data.Weave.Naming
 import Data.Weave.Parse
 import Data.Weave.Write
+
+-- |Open a possibly existing weave file, reading in the header.
+getWeaveInfo :: Naming n => n -> IO Header
+getWeaveInfo n = do
+    r <- tryJust (guard . isDoesNotExistError) $ runConduitRes $ openPrimary n .| readHeader
+    return $ either (const blankHeader) id r
 
 -- TODO: Change to resources to clean this up.
 
