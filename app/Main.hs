@@ -16,7 +16,6 @@ import Options.Applicative
 import System.Log.Logger
 import System.Process.Typed (proc, runProcess_)
 
-import Hack.Weave.Parse
 import Hack.Zfs
 import Sure
 
@@ -36,8 +35,9 @@ main = do
             CmdSnap pretend -> do
                runSnap pretend (volumes $ snap config)
             CmdWeave -> do
-               len <- length <$> readZWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
-               putStrLn $ show len
+               undefined
+               -- len <- length <$> readZWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
+               -- putStrLn $ show len
             CmdWalk dir -> do
                putStrLn $ "Walking: " ++ dir
                tmp <- simpleWalk basicNaming $ B.pack dir
