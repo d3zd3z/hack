@@ -4,8 +4,6 @@
 
 module Sure.Types (
    AttMap,
-   SureTree(..),
-   SureFile(..),
    SureNode(..),
 
    addDirs,
@@ -23,25 +21,11 @@ import qualified Data.ByteString.Char8 as C8
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Monoid ((<>))
-import Data.Vector (Vector)
 
 -- |An attribute maintains a k/v mapping for the filesystem mappings.
 -- Everything is treated as ascii strings, with a special escaping
 -- used for things that came from strings that are user specified.
 type AttMap = Map B.ByteString B.ByteString
-
--- |The top of a suretree.
-data SureTree = SureTree {
-   stName :: !B.ByteString,
-   stAtts :: !AttMap,
-   stChildren :: !(Vector SureTree),
-   stFiles :: !(Vector SureFile) }
-   deriving Show
-
-data SureFile = SureFile {
-   sfName :: !B.ByteString,
-   sfAtts :: !AttMap }
-   deriving Show
 
 -- |The tree traversal is a SureNode.
 data SureNode =

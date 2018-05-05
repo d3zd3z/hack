@@ -15,7 +15,7 @@ import Sure.Atts (AttMap, getAtts, isDir)
 import Conduit
 import Control.Exception (bracket, throwIO, tryJust)
 import Control.Monad (guard, forM, unless)
-import Control.Monad.State.Strict
+import Control.Monad.Trans.State.Strict
 import qualified Data.ByteString.Char8 as B
 import Data.List (partition, sortOn)
 import Data.Maybe (catMaybes)

@@ -12,11 +12,8 @@ module Data.Weave (
 ) where
 
 import Conduit
-import Control.Lens (view)
-import Control.Monad.Catch (MonadMask, bracket)
-import Control.Monad.IO.Class
 import qualified Data.ByteString as B
-import System.IO (hClose, openFile, IOMode(..))
+import System.IO (hClose)
 
 import Data.Weave.Naming
 import Data.Weave.Parse
