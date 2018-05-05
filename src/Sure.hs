@@ -30,8 +30,6 @@ import Text.Progress (withPMeter)
 basicNaming :: SimpleNaming
 basicNaming = SimpleNaming "./2sure" "dat" True
 
--- TODO: Convert Naming operations to resources.
-
 -- Walk a filesystem at 'dirName', dumping the scan data into a new temp
 -- file, and return the name of the temp file.
 simpleWalk :: Naming n => n -> B.ByteString -> IO FilePath
@@ -48,15 +46,6 @@ oldWalk naming dirName oldName = do
         let srcOld = fromTempFile oldName .| sureNodeParser
         combineTrees srcOld srcNew .| SH.combineHashes .|
             toTempFile naming (\tname -> sureEncoder >> return tname)
-{-
-oldWalk naming dirName oldName = do
-    toTempFile naming $ \sink tname -> do
-        fromTempFile oldName $ \srcOld -> do
-            let srcNew = walk dirName
-            let out = sureEncoder >-> sink
-            runEffect $ SH.combineHashes (srcOld >-> sureNodeParser) srcNew >-> out
-            return tname
--}
 
 -- Read a temp file containing a walk, and build an estimate of the
 -- number and size of hashes that need computation.
@@ -71,16 +60,6 @@ updateHashes naming hp path rootDir = do
         fromTempFile path .| sureNodeParser .| addDirs rootDir .|
             SH.computeHashes meter hp .|
             toTempFile naming (\tname -> sureEncoder >> return tname)
-{-
-updateHashes naming hp path rootDir = do
-    fromTempFile path $ \src -> do
-        toTempFile naming $ \sink tname -> do
-            withPMeter $ \meter -> do
-                let inp = src >-> sureNodeParser >-> addDirs rootDir
-                let outp = sureEncoder >-> sink
-                runEffect $ inp >-> SH.computeHashes meter hp >-> outp
-                return tname
--}
 
 simpleSignoff :: FilePath -> FilePath -> IO ()
 simpleSignoff oldPath newPath = do
