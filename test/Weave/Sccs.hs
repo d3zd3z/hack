@@ -6,7 +6,6 @@ module Weave.Sccs (
 ) where
 
 import Data.Weave.Parse
-import Data.Weave.Types
 import Weave.Gen
 
 import Control.Exception (Handler(..), IOException, catches)
@@ -14,7 +13,6 @@ import Control.Monad.Reader
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
 import Data.Foldable (for_)
-import Data.Maybe (mapMaybe)
 import Pipes ((>->))
 import qualified Pipes.Prelude as PP
 import System.Directory (removeFile)

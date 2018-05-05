@@ -58,11 +58,15 @@ combineHashes
     -> Producer SureNode m ()
     -> Producer SureNode m ()
 combineHashes _srcOld srcNew = do
-    -- To start, just ignore the old.
-    hd <- lift $ next srcNew
-    loop hd
+    -- old <- lift $ next srcOld
+    new <- lift $ next srcNew
+    -- unless (sameDir old new) $ lift $ throwIO $ userException "directory mismatch"
+    loop new
     where
-        -- loop :: Monad mm => Either () (SureNode, Producer SureNode mm ()) -> Producer SureNode mm ()
+        -- Process the top level directory.  old and new should be the
+        -- first nodes within each directory.  May call itself
+        -- recursively to process subdirectories, and will talk-call
+        -- to handle the file processing nodes at the end.
         loop
             :: Monad mm
             => Either () (SureNode, Producer SureNode mm ())
@@ -72,6 +76,18 @@ combineHashes _srcOld srcNew = do
             yield node
             hd <- lift $ next src2
             loop hd
+
+        {-
+        -- Most of the time, end of input is an error, so to simplify,
+        -- raise an exception if we get to the end when unexpected
+        mustNext :: MonadIO m => Producer SureNode m () -> Producer SureNode m SureNode
+        mustNext src = do
+            node <- lift $ next src
+            either
+                (\r -> lift $ throwIO $ userException $ "Unexpected exception" ++ show r)
+                id
+                node
+        -}
 
 -- * Hash updating
 --
