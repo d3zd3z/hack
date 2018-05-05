@@ -5,7 +5,7 @@ module Weave.Gen (
 ) where
 
 -- Explicitly ask for the Lazy version, as we need it.
-import Control.Monad.State.Lazy
+import Control.Monad.Trans.State.Lazy
 import System.Random
 
 -- Simulate edit operations on a list of integers of length 'len'.

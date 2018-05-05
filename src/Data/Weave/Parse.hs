@@ -27,103 +27,70 @@
 module Data.Weave.Parse (
     readDelta,
     onlyPlain,
-
-    -- Convenience re-exports
-    withFileEffect,
-    outSink
 ) where
 
-import Control.Lens (view)
+import Conduit
 import Data.Aeson (decode)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
-import Pipes
-import qualified Pipes.ByteString as P
-import qualified Pipes.Prelude as PP
-import Pipes.Group (folds)
-import Pipes.GZip (decompress)
-import System.IO (Handle, withFile, IOMode(..))
 import Text.Read (readMaybe)
 
 import Data.Weave.Types
 
--- |Not sure this belongs here, but this runs a given effect on a
--- given file.
+readDelta :: Monad m => Int -> ConduitT B.ByteString WeaveElement m ()
+readDelta num = decodePipe .| getDelta num
 
--- |Read a given delta from the named file, decompressing if
--- isCompressed is true.
-readDelta :: MonadIO m => Handle -> Bool -> Int -> Producer WeaveElement m ()
-readDelta h isComp delta =
-    let src = (if isComp then zFileSource else fileSource) h in
-    src >-> decodePipe >-> getDelta delta
-
--- |Take a handle and return a Producer returning the lines from that
--- file.  Unlike the normal group operations, this does append all of
--- the individual bytestrings making up the line into a single
--- bytestring.
-fileSource :: MonadIO m => Handle -> Producer B.ByteString m ()
-fileSource = xformFileSource id
-
--- |Like fileSource, but read from a compressed file.
-zFileSource :: MonadIO m => Handle -> Producer B.ByteString m ()
-zFileSource = xformFileSource decompress
-
-xformFileSource
-    :: MonadIO m
-    => (Producer B.ByteString m () -> Producer B.ByteString m ())
-    -> Handle
-    -> Producer B.ByteString m ()
-xformFileSource xform = folds mappend B.empty id . view P.lines . xform . P.fromHandle
-
--- |Decode elements
-decodePipe :: Monad m => Pipe B.ByteString WeaveElement m ()
-decodePipe = PP.map decodeOne
+-- |Decode elements.  It expects each ByteString to be a single line,
+-- and results in the weave elements from the stream.
+decodePipe :: Monad m => ConduitT B.ByteString WeaveElement m ()
+decodePipe = mapC decodeOne
 
 -- |Only get included plaintext lines.
-onlyPlain :: Monad m => Pipe WeaveElement B.ByteString m ()
-onlyPlain = for cat $ \elt -> do
+onlyPlain :: Monad m => ConduitT WeaveElement B.ByteString m ()
+onlyPlain = awaitForever $ \elt -> do
     case elt of
         (WeavePlain text (Just _)) -> yield text
         _                          -> return ()
 
 -- |By tracking the insert/delete/end state, augment any "plain"
 -- lines, adding a line number, and a flag indicating if it should be
--- kept by the specified delta.  Nothing indicates not to kep, and
+-- kept by the specified delta.  Nothing indicates not to keep, and
 -- 'Just n' indicates that it should be kept, with the given line
 -- number.
-getDelta :: Monad m => Int -> Pipe WeaveElement WeaveElement m ()
+getDelta :: Monad m => Int -> ConduitT WeaveElement WeaveElement m ()
 getDelta delta = loop Map.empty 0 False
     where
         loop states lineno keeping = do
             elt <- await
             case elt of
-                (WeaveInsert dl) -> do
+                Just node@(WeaveInsert dl) -> do
                     let nstate = if delta >= dl then Keep else Skip
                     let states' = Map.insert dl nstate states
-                    yield elt
+                    yield node
                     loop states' lineno (keepState states')
-                (WeaveDelete dl) -> do
+                Just node@(WeaveDelete dl) -> do
                     let nstate = if delta >= dl then Skip else Next
                     let states' = Map.insert dl nstate states
-                    yield elt
+                    yield node
                     loop states' lineno (keepState states')
-                (WeaveEnd dl) -> do
+                Just node@(WeaveEnd dl) -> do
                     let states' = Map.delete dl states
-                    yield elt
+                    yield node
                     loop states' lineno (keepState states')
-                (WeavePlain text _) -> do
+                Just (WeavePlain text _) -> do
                     if keeping then do
                         yield $ WeavePlain text (Just $ lineno + 1)
                         loop states (lineno + 1) keeping
                     else do
                         yield $ WeavePlain text Nothing
                         loop states lineno keeping
-                other -> do
+                Just other -> do
                     yield other
                     loop states lineno keeping
+                Nothing -> return ()
 
 data State = Keep | Skip | Next
 
@@ -156,15 +123,3 @@ getHeader line = maybe (WeaveError line) WeaveHeader $ decode $
 getNum :: (Int -> WeaveElement) -> B.ByteString -> WeaveElement
 getNum enc line =
     maybe (WeaveError line) enc $ readMaybe $ C8.unpack $ C8.drop 3 line
-
--- |Run an effect with the contents of the given file.
-withFileEffect :: FilePath -> (Handle -> Effect IO a) -> IO a
-withFileEffect path ef =
-    withFile path ReadMode $ \h -> (runEffect $ ef h)
-
--- For debugging, a consumer that prints out all of the things
--- received.
-outSink :: (MonadIO m, Show s) => Consumer' s m ()
-outSink =
-    for cat $ \piece -> do
-        liftIO $ putStrLn $ show $ {- B.length -} piece

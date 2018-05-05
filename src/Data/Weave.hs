@@ -5,10 +5,10 @@
 module Data.Weave (
     Naming(..),
     SimpleNaming(..),
-    outSink,
     firstDelta,
     toTempFile,
-    fromTempFile
+    fromTempFile,
+    readDelta,
 ) where
 
 import Conduit

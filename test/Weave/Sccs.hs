@@ -5,24 +5,24 @@ module Weave.Sccs (
    runManyDeltas
 ) where
 
-import Data.Weave.Parse
-import Weave.Gen
-
+import Conduit
 import Control.Exception (Handler(..), IOException, catches)
-import Control.Monad.Reader
+import Control.Monad.Trans.Reader
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as C8
 import Data.Foldable (for_)
-import Pipes ((>->))
-import qualified Pipes.Prelude as PP
 import System.Directory (removeFile)
-import System.IO (openFile, IOMode(..), withFile)
+import System.IO (openFile, IOMode(..))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process.Typed (ExitCodeException, proc, readProcess_, runProcess_,
    setWorkingDir)
 import qualified System.Process.Typed as P
 import Test.Tasty.HUnit ((@?=))
 import Text.Regex.TDFA ((=~))
+
+import Data.Weave
+import Data.Weave.Parse
+import Weave.Gen
 
 data Env = Env {
    tempDir :: FilePath }
@@ -56,8 +56,9 @@ check expected delta = do
 -- stream into memory, but useful for testing.
 getDelta :: FilePath -> Int -> IO [String]
 getDelta name delta = do
-    withFile name ReadMode $ \h -> do
-        PP.toListM $ readDelta h False delta >-> onlyPlain >-> PP.map C8.unpack
+    runConduitRes $ do
+        let src = fromTempFile name
+        src .| readDelta delta .| onlyPlain .| mapC C8.unpack .| sinkList
 
 -- Write the given sequence to a new file, and create the first sccs
 -- version.
