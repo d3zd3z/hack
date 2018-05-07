@@ -42,6 +42,7 @@ scan naming dirName = do
         est <- estimateHashes t1
         t2 <- updateHashes naming est t1 dirName
         liftIO $ putStrLn $ "Scan in: " ++ show t2
+        addDeltaFile naming t2
 
 -- Walk a filesystem at 'dirName', dumping the scan data into a new temp
 -- file, and return the name of the temp file.

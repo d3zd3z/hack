@@ -9,8 +9,10 @@ module Data.Weave.Header (
    highestDelta,
    firstHeader,
    blankHeader,
+   isEmptyHeader,
 ) where
 
+import Control.Monad.IO.Class
 import Data.Aeson.TH
 import Data.Map (Map)
 import Data.Text (Text)
@@ -40,9 +42,9 @@ deriveJSON defaultOptions ''Header
 deriveJSON defaultOptions ''DeltaInfo
 
 -- |Add a new delta to the given header.
-addDelta :: Text -> Map Text Text -> Header -> IO Header
+addDelta :: MonadIO m => Text -> Map Text Text -> Header -> m Header
 addDelta name tags hdr = do
-   now <- getCurrentTime
+   now <- liftIO getCurrentTime
    let dlt = deltas hdr
    let newDelta = DeltaInfo {
       name = name,
@@ -50,6 +52,11 @@ addDelta name tags hdr = do
       tags = tags,
       time = now }
    return $ hdr { deltas = newDelta : dlt }
+
+-- |Is this header empty?
+isEmptyHeader :: Header -> Bool
+isEmptyHeader Header{deltas = []} = True
+isEmptyHeader _ = False
 
 -- |Construct the first delta.
 firstHeader :: Text -> Map Text Text -> IO Header
