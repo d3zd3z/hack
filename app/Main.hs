@@ -3,6 +3,8 @@ module Main where
 
 import Homedir
 import Config (loadConfigError, Config(..), Snap(..), Volume(..))
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Resource
 import qualified Data.ByteString.Char8 as B
 import Data.Maybe (isNothing)
 import Data.Time.Clock (getCurrentTime)
@@ -40,21 +42,23 @@ main = do
                -- len <- length <$> readZWeaveFile "/lint/sure/jokehome-doy.dat.gz" 1
                -- putStrLn $ show len
             CmdWalk dir -> do
-               putStrLn $ "Walking: " ++ dir
-               tmp <- simpleWalk basicNaming $ B.pack dir
-               putStrLn $ "Written to: " ++ show tmp
-               est <- estimateHashes tmp
-               putStrLn $ "Estimate: " ++ show est
-               tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
-               putStrLn $ "Written to: " ++ show tmp2
+               runResourceT $ do
+                   liftIO $ putStrLn $ "Walking: " ++ dir
+                   tmp <- simpleWalk basicNaming $ B.pack dir
+                   liftIO $ putStrLn $ "Written to: " ++ show tmp
+                   est <- estimateHashes tmp
+                   liftIO $ putStrLn $ "Estimate: " ++ show est
+                   tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
+                   liftIO $ putStrLn $ "Written to: " ++ show tmp2
             CmdOWalk dir ofile -> do
-               putStrLn $ "Walking: " ++ dir
-               tmp <- oldWalk basicNaming (B.pack dir) ofile
-               putStrLn $ "Written to: " ++ show tmp
-               est <- estimateHashes tmp
-               putStrLn $ "Estimate: " ++ show est
-               tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
-               putStrLn $ "Written to: " ++ show tmp2
+               runResourceT $ do
+                   liftIO $ putStrLn $ "Walking: " ++ dir
+                   tmp <- oldWalk basicNaming (B.pack dir) ofile
+                   liftIO $ putStrLn $ "Written to: " ++ show tmp
+                   est <- estimateHashes tmp
+                   liftIO $ putStrLn $ "Estimate: " ++ show est
+                   tmp2 <- updateHashes basicNaming est tmp $ B.pack dir
+                   liftIO $ putStrLn $ "Written to: " ++ show tmp2
             CmdSignoff ofile nfile -> do
                putStrLn $ "Signoff"
                simpleSignoff ofile nfile

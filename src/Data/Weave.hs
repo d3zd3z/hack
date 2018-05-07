@@ -16,7 +16,9 @@ module Data.Weave (
 import Conduit
 import Control.Exception (tryJust)
 import Control.Monad (guard)
+import Control.Monad.Trans.Resource (liftResourceT, register)
 import qualified Data.ByteString as B
+import System.Directory (removeFile)
 import System.IO (hClose)
 import System.IO.Error (isDoesNotExistError)
 
@@ -40,13 +42,18 @@ getWeaveInfo n = do
 -- as part of the result of the action.
 -- This is a combinator so we can pass the name of the file to the
 -- action.
+-- This will use the resource to register the deletion of the
+-- temporary file when the resource is finished.  The file will be
+-- closed as soon as the pipeline is finished, but will stay around
+-- until the resource is completed.
 toTempFile
     :: (Naming n, MonadResource m)
     => n
     -> (FilePath -> ConduitT a B.ByteString m r)
     -> ConduitT a Void m r
 toTempFile naming action = do
-    bracketP (liftIO $ openTemp naming False) (liftIO . hClose . snd) $ \(tname, h) -> do
+    bracketP (openTemp naming False) (hClose . snd) $ \(tname, h) -> do
+        _ <- liftResourceT $ register $ removeFile tname
         let pipe = unlinesAsciiC .| sinkHandle h
         (res, _) <- fuseBoth (action tname) pipe
         return $ res
