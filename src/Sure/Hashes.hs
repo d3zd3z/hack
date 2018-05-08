@@ -11,6 +11,7 @@ module Sure.Hashes (
 ) where
 
 import Conduit
+import qualified Data.Conduit.List as CL
 import qualified Crypto.Hash as H
 import qualified Data.ByteArray as DBA
 import qualified Data.ByteString as B
@@ -74,29 +75,26 @@ combineHashes =
 -- * Hash updating
 --
 -- | Compute the hashes for the given stream.
+-- TODO: Make something like parMapAccum that can do the update in
+-- parallel, but will need to figure out how to combine the updates.
 computeHashes
     :: MonadIO m
     => PMeter
     -> HashProgress
     -> ConduitT (B.ByteString, SureNode) SureNode m ()
-computeHashes meter total = do
-    let
-        loop :: MonadIO mm => HashProgress -> ConduitT (B.ByteString, SureNode) SureNode mm ()
-        loop hp = do
-            mnode <- await
-            case mnode of
-                Nothing -> return ()
-                Just (name, node) -> do
-                    if needsHash node then do
-                        hash <- liftIO $ hashFile name
-                        yield $ maybe node (updateAtt node "sha1") hash
-                        let hp' = updateProgress node hp
-                        liftIO $ showStatus meter hp' total
-                        loop hp'
-                    else do
-                        yield node
-                        loop hp
-    loop mempty
+computeHashes meter total = CL.mapAccumM process mempty >> return ()
+    where
+        process :: MonadIO mm
+            => (B.ByteString, SureNode)
+            -> HashProgress
+            -> mm (HashProgress, SureNode)
+        process (name, node) hp = do
+            if needsHash node then do
+                hash <- liftIO $ hashFile name
+                let hp' = updateProgress node hp
+                liftIO $ showStatus meter hp' total
+                return (hp', maybe node (updateAtt node "sha1") hash)
+            else return (hp, node)
 
 showStatus :: PMeter -> HashProgress -> HashProgress -> IO ()
 showStatus meter hp total = do
