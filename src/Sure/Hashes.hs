@@ -12,6 +12,7 @@ module Sure.Hashes (
 
 import Conduit
 import Control.Concurrent (newMVar, modifyMVar_)
+import Control.Monad (when)
 import qualified Crypto.Hash as H
 import qualified Data.ByteArray as DBA
 import qualified Data.ByteString as B
@@ -86,11 +87,11 @@ computeHashes meter total = do
     let
         update1 (name, node) = do
             if needsHash node then do
-                modifyMVar_ mv $ \level -> do
+                when chatty $ modifyMVar_ mv $ \level -> do
                     putStrLn $ (replicate (3 * level) ' ') ++ "Hashing: " ++ show name
                     return $ level + 1
                 hash <- hashFile name
-                modifyMVar_ mv $ \level -> do
+                when chatty $ modifyMVar_ mv $ \level -> do
                     putStrLn $ (replicate (3 * (level-1)) ' ') ++ "Done: " ++ show name
                     return $ level - 1
                 let hp' = updateProgress node mempty  -- TODO: Make more moniodal
@@ -98,6 +99,9 @@ computeHashes meter total = do
             else return (mempty, node)
     _ <- parMapAccumM update1 (\hp -> showStatus meter hp total) mempty
     return ()
+
+chatty :: Bool
+chatty = False
 {-
 computeHashes meter total = CL.mapAccumM process mempty >> return ()
     where
