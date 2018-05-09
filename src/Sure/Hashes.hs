@@ -11,7 +11,7 @@ module Sure.Hashes (
 ) where
 
 import Conduit
-import qualified Data.Conduit.List as CL
+import Control.Concurrent (newMVar, modifyMVar_)
 import qualified Crypto.Hash as H
 import qualified Data.ByteArray as DBA
 import qualified Data.ByteString as B
@@ -24,6 +24,7 @@ import Text.Human
 import Text.Progress
 import Text.Printf (printf)
 
+import Control.Concurrent.ParMap
 import Sure.Compare
 import Sure.Walk (safely)
 import Sure.Types
@@ -75,13 +76,29 @@ combineHashes =
 -- * Hash updating
 --
 -- | Compute the hashes for the given stream.
--- TODO: Make something like parMapAccum that can do the update in
--- parallel, but will need to figure out how to combine the updates.
 computeHashes
     :: MonadIO m
     => PMeter
     -> HashProgress
     -> ConduitT (B.ByteString, SureNode) SureNode m ()
+computeHashes meter total = do
+    mv <- liftIO $ newMVar (0 :: Int)
+    let
+        update1 (name, node) = do
+            if needsHash node then do
+                modifyMVar_ mv $ \level -> do
+                    putStrLn $ (replicate (3 * level) ' ') ++ "Hashing: " ++ show name
+                    return $ level + 1
+                hash <- hashFile name
+                modifyMVar_ mv $ \level -> do
+                    putStrLn $ (replicate (3 * (level-1)) ' ') ++ "Done: " ++ show name
+                    return $ level - 1
+                let hp' = updateProgress node mempty  -- TODO: Make more moniodal
+                return (hp', maybe node (updateAtt node "sha1") hash)
+            else return (mempty, node)
+    _ <- parMapAccumM update1 (\hp -> showStatus meter hp total) mempty
+    return ()
+{-
 computeHashes meter total = CL.mapAccumM process mempty >> return ()
     where
         process :: MonadIO mm
@@ -95,6 +112,7 @@ computeHashes meter total = CL.mapAccumM process mempty >> return ()
                 liftIO $ showStatus meter hp' total
                 return (hp', maybe node (updateAtt node "sha1") hash)
             else return (hp, node)
+-}
 
 showStatus :: PMeter -> HashProgress -> HashProgress -> IO ()
 showStatus meter hp total = do
