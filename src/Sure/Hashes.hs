@@ -13,21 +13,16 @@ module Sure.Hashes (
 import Conduit
 import Control.Concurrent (newMVar, modifyMVar_)
 import Control.Monad (when)
-import qualified Crypto.Hash as H
-import qualified Data.ByteArray as DBA
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as B
-import qualified Data.ByteString.Lazy as L
 import qualified Data.Map.Strict as Map
 import Data.Monoid ((<>))
-import qualified System.Posix.ByteString as U
 import Text.Human
 import Text.Progress
 import Text.Printf (printf)
 
 import Control.Concurrent.ParMap
 import Sure.Compare
-import Sure.Walk (safely)
+import Sure.Hashes.Internal
 import Sure.Types
 
 -- |Fold down a Producer representing a tree, and update a state with
@@ -77,6 +72,14 @@ combineHashes =
 -- * Hash updating
 --
 -- | Compute the hashes for the given stream.
+--
+-- This uses parMapAccumM to try and do more work in parallel.  In
+-- practice, this doesn't do very well, since it will only have a
+-- certain number of work items queued, and then it waits for the slow
+-- ones to finish.  Large files tend to get "stuck" blocking smaller
+-- items from causing more work to queue up.  It is difficult to do
+-- more work without risking using potentially unbounded amounts of
+-- memory to hold intermediate work.
 computeHashes
     :: MonadIO m
     => PMeter
@@ -99,6 +102,12 @@ computeHashes meter total = do
             else return (mempty, node)
     _ <- parMapAccumM update1 (\hp -> showStatus meter hp total) mempty
     return ()
+
+-- | A faster hash update.  In order to be able to update hashes, and
+-- saturate the CPUs, we need to be able to compute hashes in an
+-- arbitrary order, potentially reording things before generating the
+-- final result.  We will need to have some limit on how much we
+-- run ahead, so that we don't use too much memory.
 
 chatty :: Bool
 chatty = False
@@ -128,33 +137,3 @@ showStatus meter hp total = do
         (humanizeBytes $ hpBytes total)
         ((fromIntegral $ hpBytes hp :: Double) /
          (fromIntegral $ hpBytes total) * 100.0)
-
--- | Compute the hash of a given file, returning it if possible.
--- To preserve compatibility with the rest of this system, use the
--- Posix.ByteString operations on the file.  It is lower-level, and
--- more complex, but will avoid problems with filenames that have
--- invalid Unicode characters in them.
---
--- TODO: Although many people run without atime enabled, Linux does
--- provide a way of disabling the atime change upon read.  This
--- doesn't appear to be visible in the 'unix' package, so would have
--- to be bound manually.
-hashFile :: B.ByteString -> IO (Maybe B.ByteString)
-hashFile = safely . hashFile'
-
-hashFile' :: B.ByteString -> IO B.ByteString
-hashFile' name = do
-    fd <- U.openFd name U.ReadOnly Nothing U.defaultFileFlags
-    h <- U.fdToHandle fd
-    payload <- L.hGetContents h
-    let hash = H.hashlazy payload :: H.Digest H.SHA1
-    return $ hexifyB hash
-
--- A builder that converts a ByteArray unto its hex representation.
-hexifyB :: DBA.ByteArrayAccess b => b -> B.ByteString
-hexifyB =
-    L.toStrict .
-        B.toLazyByteString .
-        mconcat .
-        map B.word8HexFixed .
-        DBA.unpack
