@@ -33,6 +33,8 @@ dependencies:
 - exceptions >= 0.8 && < 0.9
 - filepath >= 1.4 && < 1.5
 - free >= 5.0 && < 5.1
+- HDBC >= 2.4 && < 2.5
+- HDBC-sqlite3 >= 2.3 && < 2.4
 - hslogger >= 1.2 && < 1.3
 - lens >= 4.16 && < 4.17
 - memory >= 0.14 && < 0.15
@@ -83,6 +85,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - hack
+    - binary >= 0.8 && < 0.9
     - directory >= 1.3 && < 1.4
     - random >= 1.1 && < 1.2
     - random-fu >= 0.2 && < 0.3

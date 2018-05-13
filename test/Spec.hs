@@ -9,6 +9,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import Data.Weave.Header (Header)
+import Sure.HashTest
 import Weave.Sccs
 
 main :: IO ()
@@ -18,7 +19,9 @@ unitTests :: TestTree
 unitTests = testGroup "Unit tests"
     [
         testCase "Header Test" testHeader,
-        testCase "Sccs Many Delta Test" tryManyDeltas ]
+        testCase "Sccs Many Delta Test" tryManyDeltas,
+        testCase "hashtest" testHash,
+        testCase "toFile" testToFile ]
 
 testHeader :: IO ()
 testHeader = do
