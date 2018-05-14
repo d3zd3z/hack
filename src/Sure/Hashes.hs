@@ -15,10 +15,7 @@ import Control.Concurrent (newMVar, modifyMVar_)
 import Control.Monad (when)
 import qualified Data.ByteString as B
 import qualified Data.Map.Strict as Map
-import Data.Monoid ((<>))
-import Text.Human
 import Text.Progress
-import Text.Printf (printf)
 
 import Control.Concurrent.ParMap
 import Sure.Compare
@@ -29,22 +26,6 @@ import Sure.Types
 -- the values that need updating.
 estimateHashes :: Monad m => ConduitT SureNode o m HashProgress
 estimateHashes = foldlC (flip updateProgress) mempty
-
-updateProgress :: SureNode -> HashProgress -> HashProgress
-updateProgress node hp =
-    if needsHash node then hp <> HashProgress 1 (nodeSize node)
-        else hp
-
--- |The progress of hash updating.  Tracks the number of files and the
--- number of bytes visited by a hash update.
-data HashProgress = HashProgress {
-    hpFiles :: !Integer,
-    hpBytes :: !Integer }
-    deriving Show
-
-instance Monoid HashProgress where
-    mempty = HashProgress 0 0
-    mappend (HashProgress a1 b1) (HashProgress a2 b2) = HashProgress (a1 + a2) (b1 + b2)
 
 -- * Hash combining
 
@@ -126,14 +107,3 @@ computeHashes meter total = CL.mapAccumM process mempty >> return ()
                 return (hp', maybe node (updateAtt node "sha1") hash)
             else return (hp, node)
 -}
-
-showStatus :: PMeter -> HashProgress -> HashProgress -> IO ()
-showStatus meter hp total = do
-    pmPut meter $ printf "%8d/%8d (%5.1f%%) files, %s/%s (%5.1f%%) bytes"
-        (hpFiles hp) (hpFiles total)
-        ((fromIntegral $ hpFiles hp :: Double) /
-         (fromIntegral $ hpFiles total) * 100.0)
-        (humanizeBytes $ hpBytes hp)
-        (humanizeBytes $ hpBytes total)
-        ((fromIntegral $ hpBytes hp :: Double) /
-         (fromIntegral $ hpBytes total) * 100.0)

@@ -10,6 +10,7 @@ module Sure (
     simpleWalk,
     oldWalk,
     estimateHashes,
+    updateHashes1,
     updateHashes,
     simpleSignoff,
 ) where
@@ -24,6 +25,7 @@ import Sure.Encode (sureEncoder)
 import qualified Sure.Hashes as SH
 import Sure.Compare
 import Sure.Hashes (HashProgress(..))
+import Sure.Hashes.Parallel
 import Sure.Types (addDirs)
 import Sure.Signoff
 import Sure.Walk (walk)
@@ -42,7 +44,9 @@ scan naming dirName = do
         est <- estimateHashes t1
         t2 <- updateHashes naming est t1 dirName
         liftIO $ putStrLn $ "Scan in: " ++ show t2
-        addDeltaFile naming t2
+        t3 <- collectHashes naming t1 t2
+        liftIO $ putStrLn $ "combined in: " ++ show t3
+        addDeltaFile naming t3
 
 -- Walk a filesystem at 'dirName', dumping the scan data into a new temp
 -- file, and return the name of the temp file.
@@ -68,6 +72,19 @@ estimateHashes path = do
     runConduit $ fromTempFile path .| sureNodeParser .| SH.estimateHashes
 
 -- |Update the hashes, for any nodes that don't have hashes.
+updateHashes1
+    :: (Naming n, MonadResource m)
+    => n
+    -> HashProgress
+    -> FilePath
+    -> B.ByteString
+    -> m FilePath
+updateHashes1 naming hp path rootDir = do
+    runConduit $ withPMeter $ \meter -> do
+        fromTempFile path .| sureNodeParser .| addDirs rootDir .|
+            SH.computeHashes meter hp .|
+            toTempFile naming (\tname -> sureEncoder >> return tname)
+
 updateHashes
     :: (Naming n, MonadResource m)
     => n
@@ -78,8 +95,19 @@ updateHashes
 updateHashes naming hp path rootDir = do
     runConduit $ withPMeter $ \meter -> do
         fromTempFile path .| sureNodeParser .| addDirs rootDir .|
-            SH.computeHashes meter hp .|
-            toTempFile naming (\tname -> sureEncoder >> return tname)
+            numberNodes .| hashSink naming meter hp
+
+collectHashes
+    :: (Naming n, MonadResource m)
+    => n
+    -> FilePath
+    -> FilePath
+    -> m FilePath
+collectHashes naming nodepath dbpath = do
+    let srcNodes = fromTempFile nodepath .| sureNodeParser .| numberNodes
+    let srcHashes = hashSource dbpath
+    runConduit $
+        mergeNodeDb srcNodes srcHashes .| toTempFile naming (\tname -> sureEncoder >> return tname)
 
 simpleSignoff :: FilePath -> FilePath -> IO ()
 simpleSignoff oldPath newPath = do
