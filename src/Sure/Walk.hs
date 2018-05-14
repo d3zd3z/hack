@@ -77,7 +77,7 @@ getDir dir = do
     stats <- liftIO $ mapM (statFile dir) names
     update $ catMaybes stats
     liftIO $ forM (catMaybes $ map liftMaybe2 $ zip names stats) $ \(name, stat) -> do
-        atts <- getAtts name stat
+        atts <- getAtts (dir <> "/" <> name) stat
         return $ (name, atts)
 
 -- |Update the statistics based on the stats given.
