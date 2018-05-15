@@ -11,6 +11,10 @@ module Sure.Hashes.Parallel (
 ) where
 
 import Conduit
+import Control.Concurrent.STM (STM, atomically, retry,
+    TVar, newTVarIO, modifyTVar, readTVar, writeTVar)
+import Control.Concurrent (getNumCapabilities,
+    newMVar, withMVar, forkIO)
 import Control.Monad (when)
 import Control.Monad.Trans.Resource (liftResourceT, register)
 import qualified Data.ByteString as B
@@ -38,6 +42,9 @@ hashSink
 hashSink n meter total =
     bracketP (toDb n) (disconnect . snd) $ \(tname, conn) -> do
         _ <- liftResourceT $ register $ removeFile tname
+        nWorkers <- (2*) <$> (liftIO $ getNumCapabilities)
+        workers <- liftIO $ semNew nWorkers
+        lock <- liftIO $ newMVar ()
         let
             loop :: HashProgress -> ConduitT IndexNameNode Void m ()
             loop hp = do
@@ -46,18 +53,26 @@ hashSink n meter total =
                     Nothing -> return ()
                     Just (idx, (path, node)) -> do
                         when (needsHash node) $ do
-                            h <- liftIO $ hashFile path
-                            -- TODO: Make a MaybeT wrapper here?
-                            case h of
-                                Nothing -> return ()
-                                Just hash -> do
-                                    _ <- liftIO $ run conn "INSERT INTO nodes VALUES (?, ?)"
-                                        [toSql idx, toSql hash]
-                                    return ()
+                            -- Spin off a worker.
+                            liftIO $ atomically $ semDown workers
+                            _ <- liftIO $ forkIO $ do
+                                h <- hashFile path
+                                -- TODO: Make a MaybeT wrapper here?
+                                case h of
+                                    Nothing -> return ()
+                                    Just hash -> do
+                                        withMVar lock $ \() -> do
+                                            _ <- liftIO $ run conn "INSERT INTO nodes VALUES (?, ?)"
+                                                [toSql idx, toSql hash]
+                                            return ()
+                                liftIO $ atomically $ semUp workers
+                            return ()
                         let hp' = updateProgress node hp
                         liftIO $ showStatus meter hp total
                         loop hp'
         loop mempty
+        -- Make sure everything is finished
+        liftIO $ atomically $ semDownN nWorkers workers
         liftIO $ commit conn
         return tname
 
@@ -140,3 +155,26 @@ numberNodes = loop 1 where
             Just a -> do
                 yield (n, a)
                 loop (n+1)
+
+-- This acts a bit like a counting semaphore.  It is initialized with
+-- a specific value, and then 'take' and 'give' are the semaphore
+-- operations.
+data Semaphore = Semaphore (TVar Int)
+
+semNew :: Int -> IO Semaphore
+semNew count = Semaphore <$> newTVarIO count
+
+-- Try to decrement the count, blocking if it is zero.
+semDown :: Semaphore -> STM ()
+semDown = semDownN 1
+
+-- Try to decrement the count by 'n', blocking if it is less than 'n'.
+semDownN :: Int -> Semaphore -> STM ()
+semDownN n (Semaphore sem) = do
+    cur <- readTVar sem
+    when (cur < n) $ retry
+    writeTVar sem (cur - n)
+
+-- Increment the semaphore, which will wake a waiter up.
+semUp :: Semaphore -> STM ()
+semUp (Semaphore sem) = modifyTVar sem (+ 1)
